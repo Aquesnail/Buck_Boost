@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "STM32 Debug (Hardware Reset)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/Buck_Boost_Power_SupplyVer1.1.elf",
+            "gdbPath": "G:/Environment/Arm_GNU/arm-gnu-toolchain-15.2.rel1-mingw-w64-i686-arm-none-eabi/bin/arm-none-eabi-gdb.exe",
+            "device": "STM32G431",
+            "configFiles": [
+                "openocd.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none", 
+            "preLaunchTask": "Flash Firmware"
+        }
+    ]
+}
