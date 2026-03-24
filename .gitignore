@@ -2,3 +2,5 @@
 /Software/cmake
 /Software/Core
 /Software/Drivers
+/Software/build
+/Software/build/Debug
