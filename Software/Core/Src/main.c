@@ -18,12 +18,14 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "comp.h"
 #include "dac.h"
 #include "dma.h"
 #include "fdcan.h"
 #include "i2c.h"
 #include "spi.h"
+#include "stm32g4xx_hal_tim.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -32,6 +34,8 @@
 /* USER CODE BEGIN Includes */
 #include "ST7789_SPI_Port.h"
 #include "ST7789.h"
+#include "button_port.h"
+#include "ui_main.h"
 
 /* USER CODE END Includes */
 
@@ -84,7 +88,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  HAL_Delay(3000);
+  HAL_Delay(1000);
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -110,26 +114,33 @@ int main(void)
   MX_USART2_UART_Init();
   MX_COMP4_Init();
   MX_TIM1_Init();
+  MX_TIM7_Init();
+  MX_ADC1_Init();
+  MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
 
   // 1. 调用 Port 层包装的初始化函数 (内部包含了硬件复位和寄存器配置)
   LCD_Init(); 
-
-  // 2. 启动背光/PWM (保持你原有的定时器配置)
+  Button_Port_Init();
+  
   HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_1);
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim17,TIM_CHANNEL_1 );
+  //HAL_TIM_Base_Start_IT(&htim7);
+  HAL_TIM_Base_Start(&htim1);
+
   __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 32255);
   __HAL_TIM_MOE_ENABLE(&htim8);
 
   // 3. 静态色彩测试 (利用缓冲区中转，刷屏会比之前更快)
   LCD_Clear(ST7789_COLOR_RED);
-  HAL_Delay(500);
+  //HAL_Delay(500);
   LCD_Clear(ST7789_COLOR_GREEN);
-  HAL_Delay(500);
+ // HAL_Delay(500);
   LCD_Clear(ST7789_COLOR_BLUE);
-  HAL_Delay(500);
+  //HAL_Delay(500);
 
   // 4. 绘制彩条测试
   LCD_Fill(0, 0,   240, 40, ST7789_COLOR_RED);
@@ -138,26 +149,17 @@ int main(void)
   LCD_Fill(0, 120, 240, 40, ST7789_COLOR_YELLOW);
   LCD_Fill(0, 160, 240, 40, ST7789_COLOR_CYAN);
   LCD_Fill(0, 200, 240, 40, ST7789_COLOR_MAGENTA);
-  HAL_Delay(1000);
-
+  //HAL_Delay(1000);
+  UI_DrawMainScreen_Static();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    test_tick++;
 
     // 每隔约 2 秒变换一次图案
-    if (test_tick % 20 == 0) {
-      uint16_t colors[] = {ST7789_COLOR_RED, ST7789_COLOR_GREEN, ST7789_COLOR_BLUE, ST7789_COLOR_WHITE};
-      uint16_t currentColor = colors[(test_tick / 20) % 4];
-
-      // 先清屏黑色
-      LCD_Clear(ST7789_COLOR_BLACK);
-      // 在中间画一个色块
-      LCD_Fill(80, 80, 80, 80, currentColor);
-    }
+   
 
     HAL_Delay(100);
     

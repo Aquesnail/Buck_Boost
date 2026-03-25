@@ -38,12 +38,6 @@
         * Output
         * EVENT_OUT
         * EXTI
-     PA5   ------> SharedAnalog_PA5
-     PA6   ------> SharedAnalog_PA6
-     PA7   ------> SharedAnalog_PA7
-     PB0   ------> SharedAnalog_PB0
-     PB1   ------> SharedAnalog_PB1
-     PB2   ------> SharedAnalog_PB2
 */
 void MX_GPIO_Init(void)
 {
@@ -73,18 +67,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PA5 PA6 PA7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB0 PB1 PB2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB11 PB12 PB14 */
   GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_14;

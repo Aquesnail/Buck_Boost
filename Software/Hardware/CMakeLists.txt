@@ -1,18 +1,17 @@
-# Collect all C source files in Hardware directory
-file(GLOB ST7796_HW_DRIVER_SOURCES
-    CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/*.c
+set(HW_SOURCES
+    
+    button.c
+    font.c
+   
+    ST7789.c
 )
+# 2. 创建名为 Hardware 的静态库
+add_library(Hardware STATIC ${HW_SOURCES})
 
-# Create Hardware interface library
-add_library(Hardware INTERFACE)
+target_link_libraries(Hardware PRIVATE stm32cubemx)
 
-target_sources(Hardware INTERFACE
-    $<TARGET_OBJECTS:Hardware>
-    FILE_SET HEADERS
-    BASE_HEADERS
-    ${CMAKE_CURRENT_SOURCE_DIR}/*.h
-)
+# 3. 指定头文件路径
+# 使用 "." 表示当前目录，PUBLIC 确保链接 Hardware 的目标也能引用这里的 .h
+target_include_directories(Hardware PUBLIC .)
 
-# Export variable to parent scope for main CMakeLists.txt
-set(ST7796_HW_DRIVER_SOURCES ${ST7796_HW_DRIVER_SOURCES} PARENT_SCOPE)
+# 原本我想把interrupt放在一个专门的.c文件里，但是这样的话没有人调用它们就会被链接器优化

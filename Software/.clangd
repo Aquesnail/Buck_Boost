@@ -1,0 +1,22 @@
+CompileFlags:
+  CompilationDatabase: "build/Debug"
+  Add: 
+  - "-std=c11" # 以C++11标准阅读代码
+  - "-Wall"    # 开启常用警告
+  - "-Wno-invalid-source-encoding" # 如果你的代码里有中文注释（GBK编码），加这个可以防止报编码错误
+Hover:
+  ShowAKA: Yes
+
+Diagnostics:
+  Suppress: [
+      "unused-includes",
+      "bugprone-easily-swappable-parameters"
+    ]    # 自动标记没用到的 #include（会变灰色，支持一键删除）
+  ClangTidy:
+    Add: [
+       bugprone-*,           # 检查逻辑漏洞
+    #  performance-*,        # 检查性能问题
+    #  modernize-*,          # 如果你用 C++，它会教你用更现代的语法
+       readability-identifier-naming # 甚至可以检查你的命名是否符合规范
+    ]
+    Remove: [objc-*]        # 移除不相关的检查

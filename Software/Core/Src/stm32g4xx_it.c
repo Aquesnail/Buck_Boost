@@ -22,6 +22,10 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "spi.h"
+#include "ST7789_SPI_Port.h"
+#include "button_port.h"
+#include "stm32g4xx_hal_tim.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +60,9 @@
 
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_spi2_tx;
+extern TIM_HandleTypeDef htim1;
+extern TIM_HandleTypeDef htim7;
+extern TIM_HandleTypeDef htim17;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -187,7 +194,7 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  
   /* USER CODE END SysTick_IRQn 1 */
 }
 
@@ -212,6 +219,49 @@ void DMA1_Channel1_IRQHandler(void)
   /* USER CODE END DMA1_Channel1_IRQn 1 */
 }
 
-/* USER CODE BEGIN 1 */
+/**
+  * @brief This function handles TIM1 trigger and commutation interrupts and TIM17 global interrupt.
+  */
+void TIM1_TRG_COM_TIM17_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM1_TRG_COM_TIM17_IRQn 0 */
 
+  /* USER CODE END TIM1_TRG_COM_TIM17_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim1);
+  HAL_TIM_IRQHandler(&htim17);
+  /* USER CODE BEGIN TIM1_TRG_COM_TIM17_IRQn 1 */
+
+  /* USER CODE END TIM1_TRG_COM_TIM17_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM7 global interrupt.
+  */
+void TIM7_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM7_IRQn 0 */
+
+  /* USER CODE END TIM7_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim7);
+  /* USER CODE BEGIN TIM7_IRQn 1 */
+
+  /* USER CODE END TIM7_IRQn 1 */
+}
+
+/* USER CODE BEGIN 1 */
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
+  if(hspi->Instance == hspi2.Instance){
+      SPI_Tx_DMA_Callback();
+  }
+  return;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+  if(htim->Instance == htim7.Instance){
+    Button_Port_Tick_Handler();  
+  }else if(htim->Instance == htim17.Instance){
+
+  }
+  return;
+}
 /* USER CODE END 1 */
