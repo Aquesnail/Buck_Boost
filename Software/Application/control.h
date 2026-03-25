@@ -3,6 +3,6 @@
 
 #include <stdint.h>
 
-extern void Control_Tick_Hook(void);
+void Control_Tick_Hook(void);
 
 #endif

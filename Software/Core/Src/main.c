@@ -127,8 +127,9 @@ int main(void)
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim17,TIM_CHANNEL_1 );
+  HAL_TIM_PWM_Start_IT(&htim17,TIM_CHANNEL_1 );
   //HAL_TIM_Base_Start_IT(&htim7);
+  HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start(&htim1);
 
   __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 32255);

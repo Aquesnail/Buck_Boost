@@ -9,5 +9,5 @@ PowerState_t powerState={0};
 
 
 void Control_Tick_Hook(void){
-    
+    PowerAPI_SetTargetI(1.22);
 }

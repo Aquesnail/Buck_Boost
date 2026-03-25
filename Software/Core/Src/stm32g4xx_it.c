@@ -26,6 +26,7 @@
 #include "ST7789_SPI_Port.h"
 #include "button_port.h"
 #include "stm32g4xx_hal_tim.h"
+#include "control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -251,16 +252,20 @@ void TIM7_IRQHandler(void)
 /* USER CODE BEGIN 1 */
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
   if(hspi->Instance == hspi2.Instance){
-      SPI_Tx_DMA_Callback();
+    SPI_Tx_DMA_Callback();
   }
   return;
 }
 
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
+  if(htim->Instance == htim17.Instance){
+    Button_Port_Tick_Handler();
+  }
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
   if(htim->Instance == htim7.Instance){
-    Button_Port_Tick_Handler();  
-  }else if(htim->Instance == htim17.Instance){
-
+    Control_Tick_Hook();
   }
   return;
 }

@@ -6,26 +6,27 @@
 // 按键触发事件类型
 typedef enum {
     BTN_EVENT_NONE = 0,
-    BTN_EVENT_SINGLE_CLICK,
-    BTN_EVENT_DOUBLE_CLICK,
-    BTN_EVENT_LONG_PRESS_START,
-    BTN_EVENT_LONG_PRESS_HOLD,
-    BTN_EVENT_RELEASE,
+    BTN_EVENT_SINGLE_CLICK,      // 单击确认 (在双击判定超时后触发)
+    BTN_EVENT_DOUBLE_CLICK,      // 双击
+    BTN_EVENT_LONG_PRESS_START,  // 长按开始触发
+    BTN_EVENT_LONG_PRESS_HOLD,   // 长按期间循环触发
+    BTN_EVENT_RELEASE,           // 按键释放
 } ButtonEvent_t;
 
 // 按键结构体
 typedef struct Button {
-    /* 硬件关联 */
+    /* --- 配置参数 --- */
     uint8_t id;
-    uint8_t (*read_pin_level)(uint8_t id); // 返回 0:低电平, 1:高电平
-    void (*event_callback)(uint8_t id, ButtonEvent_t event);
+    uint8_t active_level;    // 有效电平 (0 或 1)
+    uint8_t (*read_pin_level)(uint8_t id); 
+    void (*event_callback)(struct Button *btn, ButtonEvent_t event);
+    void *user_data;         // 用户自定义上下文指针（如指向某个 UI 对象或结构体）
 
-    /* 内部状态机变量 */
-    uint8_t  state;           // 当前状态
-    uint8_t  debounce_cnt;    // 消抖计数
-    uint16_t ticks;           // 计时器
-    uint8_t  click_cnt;       // 点击次数记录
-    uint8_t  active_level;    // 有效电平 (0 或 1)
+    /* --- 内部状态机变量 --- */
+    uint8_t  state;           
+    uint8_t  debounce_cnt;    
+    uint16_t ticks;           
+    uint8_t  click_cnt;       
 } Button_t;
 
 /* 核心 API */

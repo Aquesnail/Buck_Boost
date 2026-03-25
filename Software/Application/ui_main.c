@@ -1,3 +1,5 @@
+#include "ui_main.h"
+#include "ui_interaction.h"
 #include "ST7789_SPI_Port.h"
 #include "power_ui_api.h"
 #include "font.h"
