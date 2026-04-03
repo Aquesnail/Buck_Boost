@@ -10,8 +10,8 @@ typedef struct {
 
 static const GPIO_Config_t btn_hw_map[BTN_HW_COUNT] = {
     {GPIOC, GPIO_PIN_2, "Key_Encoder"},//EC11编码器旋钮自带的一个Key
-    {GPIOC, GPIO_PIN_3, "Key_Down"},
-    {GPIOA, GPIO_PIN_1, "Key_Left"},
+    {GPIOC, GPIO_PIN_3, "Key_Left"},
+    {GPIOA, GPIO_PIN_1, "Key_Middle"},
     {GPIOA, GPIO_PIN_0, "Key_Right"},
 };
 

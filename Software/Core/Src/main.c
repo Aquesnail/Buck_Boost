@@ -38,7 +38,7 @@
 #include "ui_framework.h"
 #include "ui_page_output.h"
 #include "ui_page_control.h"
-
+#include "control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -125,7 +125,7 @@ int main(void)
   LCD_Init();
   Button_Port_Init();
   Encoder_Init();
-
+  Control_Init();
   // 2. 初始化 UI 框架并注册页面
   UI_Init();
   UI_Page_t *pages[] = {

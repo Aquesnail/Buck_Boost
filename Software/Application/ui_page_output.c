@@ -107,13 +107,13 @@ static void Page_Output_Draw(void) {
     /* 第一排：电压设定/输出 */
     LCD_DrawString(10, 60, "Vset:", LABEL_FONT, fg, bg);
     char buf[16];
-    snprintf(buf, sizeof(buf), "%.2f", (double)powerState.target_v);
+    snprintf(buf, sizeof(buf), "%.2f", (float)powerState.target_v);
     DrawValueRight(80, 55, buf, VAL_FONT, v_fg, v_bg, 6);
     LCD_DrawString(220, 60, "V", LABEL_FONT, fg, bg);
 
     /* 第二排：电流设定/限流 */
     LCD_DrawString(10, 140, "Iset:", LABEL_FONT, fg, bg);
-    snprintf(buf, sizeof(buf), "%.3f", (double)powerState.target_i);
+    snprintf(buf, sizeof(buf), "%.3f", (float)powerState.target_i);
     DrawValueRight(80, 135, buf, VAL_FONT, i_fg, i_bg, 6);
     LCD_DrawString(220, 140, "A", LABEL_FONT, fg, bg);
 }
