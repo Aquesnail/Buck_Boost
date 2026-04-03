@@ -12,6 +12,7 @@
 *.map
 *.d
 *.dep
+*.zip
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

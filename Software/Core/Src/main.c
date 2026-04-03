@@ -25,7 +25,6 @@
 #include "fdcan.h"
 #include "i2c.h"
 #include "spi.h"
-#include "stm32g4xx_hal_tim.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -130,8 +129,9 @@ int main(void)
   HAL_TIM_PWM_Start_IT(&htim17,TIM_CHANNEL_1 );
   //HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim7);
+  HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
   HAL_TIM_Base_Start(&htim1);
-
+  __HAL_TIM_SET_COUNTER(&htim1, 32768);
   __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 32255);
   __HAL_TIM_MOE_ENABLE(&htim8);
 
