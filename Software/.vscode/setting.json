@@ -3,5 +3,8 @@
     "files.candidateGuessEncodings": [
         "gb2312",
         "utf8"
-    ]
+    ],
+    "files.associations": {
+    ".cursorrules": "plaintext"
+    }
 }

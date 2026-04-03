@@ -9,10 +9,10 @@ PowerMeas_t powerMeas={0};
 PowerState_t powerState={0};
 
 
-uint16_t a;
+
 void Control_Tick_Hook(void){
     PowerAPI_SetTargetI(1.22);
-    a=__HAL_TIM_GET_COUNTER(&htim1);
+   
 }
 
 
