@@ -6,5 +6,15 @@
     ],
     "files.associations": {
     ".cursorrules": "plaintext"
-    }
+    },
+    
+    "C_Cpp.intelliSenseEngine": "disabled",
+    
+    
+    "C_Cpp.symbolSearch": "Disabled",
+    
+    
+    "clangd.enable": true
+
+   
 }

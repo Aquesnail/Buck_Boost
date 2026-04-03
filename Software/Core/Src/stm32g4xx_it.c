@@ -27,6 +27,7 @@
 #include "button_port.h"
 #include "stm32g4xx_hal_tim.h"
 #include "control.h"
+#include "ui_framework.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -260,6 +261,7 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
   if(htim->Instance == htim17.Instance){
     Button_Port_Tick_Handler();
+    UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
   }
 }
 

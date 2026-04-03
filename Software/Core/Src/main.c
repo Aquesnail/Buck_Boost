@@ -34,7 +34,10 @@
 #include "ST7789_SPI_Port.h"
 #include "ST7789.h"
 #include "button_port.h"
-#include "ui_main.h"
+#include "encoder_port.h"
+#include "ui_framework.h"
+#include "ui_page_output.h"
+#include "ui_page_control.h"
 
 /* USER CODE END Includes */
 
@@ -119,9 +122,18 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // 1. 调用 Port 层包装的初始化函数 (内部包含了硬件复位和寄存器配置)
-  LCD_Init(); 
+  LCD_Init();
   Button_Port_Init();
-  
+  Encoder_Init();
+
+  // 2. 初始化 UI 框架并注册页面
+  UI_Init();
+  UI_Page_t *pages[] = {
+      &ui_page_output,
+      &ui_page_control,
+  };
+  UI_RegisterPages(pages, sizeof(pages) / sizeof(pages[0]));
+
   HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_1);
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
@@ -135,35 +147,32 @@ int main(void)
   __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 32255);
   __HAL_TIM_MOE_ENABLE(&htim8);
 
-  // 3. 静态色彩测试 (利用缓冲区中转，刷屏会比之前更快)
-  LCD_Clear(ST7789_COLOR_RED);
-  //HAL_Delay(500);
-  LCD_Clear(ST7789_COLOR_GREEN);
- // HAL_Delay(500);
-  LCD_Clear(ST7789_COLOR_BLUE);
-  //HAL_Delay(500);
+//   // 3. 静态色彩测试 (利用缓冲区中转，刷屏会比之前更快)
+//   LCD_Clear(ST7789_COLOR_RED);
+//   //HAL_Delay(500);
+//   LCD_Clear(ST7789_COLOR_GREEN);
+//  // HAL_Delay(500);
+//   LCD_Clear(ST7789_COLOR_BLUE);
+//   //HAL_Delay(500);
 
-  // 4. 绘制彩条测试
-  LCD_Fill(0, 0,   240, 40, ST7789_COLOR_RED);
-  LCD_Fill(0, 40,  240, 40, ST7789_COLOR_GREEN);
-  LCD_Fill(0, 80,  240, 40, ST7789_COLOR_BLUE);
-  LCD_Fill(0, 120, 240, 40, ST7789_COLOR_YELLOW);
-  LCD_Fill(0, 160, 240, 40, ST7789_COLOR_CYAN);
-  LCD_Fill(0, 200, 240, 40, ST7789_COLOR_MAGENTA);
+//   // 4. 绘制彩条测试
+//   LCD_Fill(0, 0,   240, 40, ST7789_COLOR_RED);
+//   LCD_Fill(0, 40,  240, 40, ST7789_COLOR_GREEN);
+//   LCD_Fill(0, 80,  240, 40, ST7789_COLOR_BLUE);
+//   LCD_Fill(0, 120, 240, 40, ST7789_COLOR_YELLOW);
+//   LCD_Fill(0, 160, 240, 40, ST7789_COLOR_CYAN);
+//   LCD_Fill(0, 200, 240, 40, ST7789_COLOR_MAGENTA);
   //HAL_Delay(1000);
-  UI_DrawMainScreen_Static();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    UI_Draw_Handler();
 
-    // 每隔约 2 秒变换一次图案
-   
+    HAL_Delay(50);
 
-    HAL_Delay(100);
-    
     // 状态灯闪烁
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_9);
     HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_10);

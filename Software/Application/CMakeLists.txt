@@ -3,8 +3,10 @@ set(APP_SOURCES
     button_port.c
     ST7789_SPI_Port.c
     control.c
-    power_ui_api.c
-    ui_main.c
+    encoder_port.c
+    ui_framework.c
+    ui_page_output.c
+    ui_page_control.c
 )
 
 # 2. 创建一个名为 Application 的静态库
