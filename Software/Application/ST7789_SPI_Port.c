@@ -120,6 +120,33 @@ void LCD_Fill(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
 }
 
 /**
+ * @brief 填充圆角矩形 (小半径近似，r 建议 2~4)
+ */
+void LCD_FillRoundRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r, uint16_t color) {
+    if (r > w / 2) r = w / 2;
+    if (r > h / 2) r = h / 2;
+
+    /* 中间主体 */
+    LCD_Fill(x + r, y, w - 2 * r, h, color);
+    /* 左右两竖条 */
+    LCD_Fill(x, y + r, r, h - 2 * r, color);
+    LCD_Fill(x + w - r, y + r, r, h - 2 * r, color);
+
+    /* 四个圆角 */
+    for (uint16_t i = 0; i < r; i++) {
+        uint16_t seg_w = i + 1;
+        uint16_t seg_x_left  = x + r - seg_w;
+        uint16_t seg_x_right = x + w - r;
+        uint16_t y_top       = y + i;
+        uint16_t y_bottom    = y + h - 1 - i;
+        LCD_Fill(seg_x_left,  y_top,    seg_w, 1, color);
+        LCD_Fill(seg_x_right, y_top,    seg_w, 1, color);
+        LCD_Fill(seg_x_left,  y_bottom, seg_w, 1, color);
+        LCD_Fill(seg_x_right, y_bottom, seg_w, 1, color);
+    }
+}
+
+/**
  * @brief 绘制图片 (带缓冲区中转)
  */
 void LCD_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *data) {
@@ -170,6 +197,28 @@ void LCD_DrawChar(uint16_t x, uint16_t y, char ch, const ASCIIFont *font, uint16
     
     // 一次性 DMA 推送
     LCD_DrawImage(x, y, font->w, font->h, char_buf);
+}
+
+/**
+ * @brief 绘制单个 ASCII 字符 (无背景，只绘制前景像素)
+ */
+void LCD_DrawChar_NoBg(uint16_t x, uint16_t y, char ch, const ASCIIFont *font, uint16_t fg_color) {
+    if (ch < ' ' || ch > '~') return; // 非法字符拦截
+
+    uint16_t char_index = ch - ' ';
+    uint8_t bytes_per_row = (font->w + 7) / 8;
+    uint16_t bytes_per_char = bytes_per_row * font->h;
+    const uint8_t *data = &font->chars[char_index * bytes_per_char];
+
+    for (uint8_t row = 0; row < font->h; row++) {
+        for (uint8_t col = 0; col < font->w; col++) {
+            uint8_t byte_idx = row * bytes_per_row + (col / 8);
+            uint8_t bit_idx = 7 - (col % 8);
+            if (data[byte_idx] & (1 << bit_idx)) {
+                LCD_DrawPoint(x + col, y + row, fg_color);
+            }
+        }
+    }
 }
 
 /**

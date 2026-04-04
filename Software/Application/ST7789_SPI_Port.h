@@ -7,10 +7,12 @@
 void LCD_Init(void);
 void LCD_Clear(uint16_t color);
 void LCD_Fill(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
+void LCD_FillRoundRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r, uint16_t color);
 void LCD_DrawPoint(uint16_t x, uint16_t y, uint16_t color);
 void LCD_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *data);
 
 void LCD_DrawChar(uint16_t x, uint16_t y, char ch, const ASCIIFont *font, uint16_t fg_color, uint16_t bg_color);
+void LCD_DrawChar_NoBg(uint16_t x, uint16_t y, char ch, const ASCIIFont *font, uint16_t fg_color);
 void LCD_DrawString(uint16_t x, uint16_t y, const char *str, const ASCIIFont *font, uint16_t fg_color, uint16_t bg_color);
 
 // === 新增：中英混合输出接口 (支持 UTF-8) ===

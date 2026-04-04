@@ -75,9 +75,9 @@ SYSCLK = VCO / R = 340 / 2 = 170 MHz
 | 引脚 | 端口 | 模式 | 上拉/下拉 | 功能 |
 |------|------|------|-----------|------|
 | PC2 | GPIOC | Input | Pull-Up | Key_Encoder |
-| PC3 | GPIOC | Input | Pull-Up | Key_Down |
-| PA0 | GPIOA | Input | Pull-Up | Key_Right |
-| PA1 | GPIOA | Input | Pull-Up | Key_Left |
+| PC3 | GPIOC | Input | Pull-Up | Key_Left |
+| PA0 | GPIOA | Input | Pull-Up | Key_Middle |
+| PA1 | GPIOA | Input | Pull-Up | Key_Right |
 
 #### 输出引脚 (LCD & LED)
 

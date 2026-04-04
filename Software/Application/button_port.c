@@ -9,10 +9,10 @@ typedef struct {
 } GPIO_Config_t;
 
 static const GPIO_Config_t btn_hw_map[BTN_HW_COUNT] = {
-    {GPIOC, GPIO_PIN_2, "Key_Encoder"},//EC11编码器旋钮自带的一个Key
+    {GPIOC, GPIO_PIN_2, "Key_Encoder"}, // EC11编码器旋钮自带的按键
     {GPIOC, GPIO_PIN_3, "Key_Left"},
-    {GPIOA, GPIO_PIN_1, "Key_Middle"},
-    {GPIOA, GPIO_PIN_0, "Key_Right"},
+    {GPIOA, GPIO_PIN_0, "Key_Middle"},
+    {GPIOA, GPIO_PIN_1, "Key_Right"},
 };
 
 static Button_t btn_pool[BTN_HW_COUNT];
