@@ -65,6 +65,10 @@ uint8_t test_tick=0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+#define SET_PWM_DUTY_HIGH_RES(HANDLE, CH, VALUE)  __HAL_TIM_SET_COMPARE(HANDLE, CH, VALUE)
+
+// 使用示例：设置一个 50.06% 的微调占空比
+// 50% 对应 425*16 = 6800，多加 1 个细分步进 = 6801
 
 /* USER CODE END PFP */
 
@@ -120,7 +124,20 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
+  /* 1. ADC1 校准 (单端模式) */
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
+      Error_Handler();
+  }
+  /* 2. ADC2 校准 (单端模式) */
+  if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK) {
+      Error_Handler();
+  }
+  /* 启动 ADC2 (Slave) 的注入组中断/转换准备 */
+  HAL_ADCEx_InjectedStart(&hadc2); 
 
+  /* 启动 ADC1 (Master) 的注入组，并开启中断 */
+  /* 只有 Master 产生 JEOC 中断，Slave 的结果会通过硬件同步到共享寄存器 */
+  HAL_ADCEx_InjectedStart_IT(&hadc1);
   // 1. 调用 Port 层包装的初始化函数 (内部包含了硬件复位和寄存器配置)
   LCD_Init();
   Button_Port_Init();
@@ -143,9 +160,10 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
   HAL_TIM_Base_Start(&htim1);
-  __HAL_TIM_SET_COUNTER(&htim1, 32768);
-  __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, 32255);
+ // __HAL_TIM_SET_COUNTER(&htim1, 32768);
+  SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_1, 6801);
   __HAL_TIM_MOE_ENABLE(&htim8);
+  SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_3, 6801);
 
 //   // 3. 静态色彩测试 (利用缓冲区中转，刷屏会比之前更快)
 //   LCD_Clear(ST7789_COLOR_RED);

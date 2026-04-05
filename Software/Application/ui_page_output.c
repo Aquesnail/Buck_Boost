@@ -40,20 +40,59 @@ static const int32_t digit_multipliers[DIGIT_COUNT] = {
  * 内部辅助函数
  * ========================================================================== */
 
-static void DrawDigitBg(uint16_t x, uint16_t y,
-                        const ASCIIFont *font, uint16_t bg,
-                        uint8_t selected, uint16_t box_color) {
-    uint16_t pad = 1;
-    uint16_t r   = 2;
-    uint16_t box_x = (x >= pad) ? (x - pad) : 0;
-    uint16_t box_y = (y >= pad) ? (y - pad) : 0;
-    uint16_t box_w = font->w + pad * 2;
-    uint16_t box_h = font->h + pad * 2;
+static void DrawCharToBuf(uint16_t *buf, uint16_t buf_w,
+                          uint16_t x, uint16_t y, char ch,
+                          const ASCIIFont *font, uint16_t fg, uint16_t bg) {
+    if (ch < ' ' || ch > '~') return;
+    uint16_t char_index = ch - ' ';
+    uint8_t bytes_per_row = (font->w + 7) / 8;
+    uint16_t bytes_per_char = bytes_per_row * font->h;
+    const uint8_t *data = &font->chars[char_index * bytes_per_char];
 
-    if (selected) {
-        LCD_FillRoundRect(box_x, box_y, box_w, box_h, r, box_color);
-    } else {
-        LCD_Fill(x, y, font->w, font->h, bg);
+    for (uint8_t row = 0; row < font->h; row++) {
+        for (uint8_t col = 0; col < font->w; col++) {
+            uint8_t byte_idx = row * bytes_per_row + (col / 8);
+            uint8_t bit_idx  = 7 - (col % 8);
+            uint16_t color = (data[byte_idx] & (1 << bit_idx)) ? fg : bg;
+            buf[(y + row) * buf_w + (x + col)] = color;
+        }
+    }
+}
+
+static void DrawRoundRectToBuf(uint16_t *buf, uint16_t buf_w,
+                               uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                               uint16_t r, uint16_t color) {
+    if (r > w / 2) r = w / 2;
+    if (r > h / 2) r = h / 2;
+    if (w == 0 || h == 0) return;
+
+    if (w > 2 * r) {
+        uint16_t line_w = w - 2 * r;
+        for (uint16_t i = 0; i < line_w; i++) {
+            buf[(y)         * buf_w + (x + r + i)] = color;
+            buf[(y + h - 1) * buf_w + (x + r + i)] = color;
+        }
+    }
+    if (h > 2 * r) {
+        uint16_t line_h = h - 2 * r;
+        for (uint16_t i = 0; i < line_h; i++) {
+            buf[(y + r + i) * buf_w + (x)]         = color;
+            buf[(y + r + i) * buf_w + (x + w - 1)] = color;
+        }
+    }
+    for (uint16_t i = 0; i < r; i++) {
+        uint16_t edge = r - 1 - i;
+        uint16_t y_top    = y + i;
+        uint16_t y_bottom = y + h - 1 - i;
+        uint16_t x_left   = x + edge;
+        uint16_t x_right  = x + w - 1 - edge;
+
+        buf[y_top    * buf_w + x_left]  = color;
+        if (x_right != x_left) buf[y_top    * buf_w + x_right] = color;
+        if (y_bottom != y_top) {
+            buf[y_bottom * buf_w + x_left]  = color;
+            if (x_right != x_left) buf[y_bottom * buf_w + x_right] = color;
+        }
     }
 }
 
@@ -68,24 +107,39 @@ static void DrawValueFixed(uint16_t x, uint16_t y, float value,
         digits[i] = (uint8_t)((milli / digit_multipliers[i]) % 10);
     }
 
-    uint16_t cx = x;
+    uint16_t pad = 1;
+    uint16_t r   = 2;
+    uint16_t cell_w = VAL_FONT_W + pad * 2; /* 14 */
+    uint16_t cell_h = VAL_FONT_H + pad * 2; /* 26 */
+    uint16_t dot_w  = VAL_FONT_W;           /* 12 */
 
-    /* 第1阶段：画所有背景和框 */
-    DrawDigitBg(cx, y, VAL_FONT, bg, sel_digit == 0, box_color); cx += VAL_FONT_W;
-    DrawDigitBg(cx, y, VAL_FONT, bg, sel_digit == 1, box_color); cx += VAL_FONT_W;
-    LCD_Fill(cx, y, VAL_FONT_W, VAL_FONT_H, bg);                 cx += VAL_FONT_W; /* 小数点 */
-    DrawDigitBg(cx, y, VAL_FONT, bg, sel_digit == 2, box_color); cx += VAL_FONT_W;
-    DrawDigitBg(cx, y, VAL_FONT, bg, sel_digit == 3, box_color); cx += VAL_FONT_W;
-    DrawDigitBg(cx, y, VAL_FONT, bg, sel_digit == 4, box_color); cx += VAL_FONT_W;
+    /* 布局: [cell][cell][dot][cell][cell][cell] */
+    uint16_t total_w = cell_w * 2 + dot_w + cell_w * 3; /* 82 */
+    uint16_t total_h = cell_h;                          /* 26 */
 
-    /* 第2阶段：只画前景字符 */
-    cx = x;
-    LCD_DrawChar_NoBg(cx, y, '0' + digits[0], VAL_FONT, fg); cx += VAL_FONT_W;
-    LCD_DrawChar_NoBg(cx, y, '0' + digits[1], VAL_FONT, fg); cx += VAL_FONT_W;
-    LCD_DrawChar_NoBg(cx, y, '.', VAL_FONT, fg);             cx += VAL_FONT_W;
-    LCD_DrawChar_NoBg(cx, y, '0' + digits[2], VAL_FONT, fg); cx += VAL_FONT_W;
-    LCD_DrawChar_NoBg(cx, y, '0' + digits[3], VAL_FONT, fg); cx += VAL_FONT_W;
-    LCD_DrawChar_NoBg(cx, y, '0' + digits[4], VAL_FONT, fg);
+    static uint16_t val_buf[84 * 26];
+    uint32_t pixels = total_w * total_h;
+    for (uint32_t i = 0; i < pixels; i++) val_buf[i] = bg;
+
+    /* 1. 画选中框 (仅边框) */
+    for (int d = 0; d < DIGIT_COUNT; d++) {
+        if (sel_digit == d) {
+            uint16_t ox = (d < 2) ? (d * cell_w) : (2 * cell_w + dot_w + (d - 2) * cell_w);
+            DrawRoundRectToBuf(val_buf, total_w, ox, 0, cell_w, cell_h, r, box_color);
+        }
+    }
+
+    /* 2. 画字符到 buffer */
+    uint16_t cx = pad;
+    DrawCharToBuf(val_buf, total_w, cx, pad, '0' + digits[0], VAL_FONT, fg, bg); cx += VAL_FONT_W + pad * 2;
+    DrawCharToBuf(val_buf, total_w, cx, pad, '0' + digits[1], VAL_FONT, fg, bg); cx += VAL_FONT_W + pad * 2;
+    DrawCharToBuf(val_buf, total_w, cx, pad, '.',            VAL_FONT, fg, bg); cx += VAL_FONT_W;
+    DrawCharToBuf(val_buf, total_w, cx, pad, '0' + digits[2], VAL_FONT, fg, bg); cx += VAL_FONT_W + pad * 2;
+    DrawCharToBuf(val_buf, total_w, cx, pad, '0' + digits[3], VAL_FONT, fg, bg); cx += VAL_FONT_W + pad * 2;
+    DrawCharToBuf(val_buf, total_w, cx, pad, '0' + digits[4], VAL_FONT, fg, bg);
+
+    /* 3. 一次性 DMA 推送整串数值 */
+    LCD_DrawImage(x - pad, y - pad, total_w, total_h, val_buf);
 }
 
 static void ApplyDigitDelta(float *val, float max_val, uint8_t d_idx, int16_t delta) {

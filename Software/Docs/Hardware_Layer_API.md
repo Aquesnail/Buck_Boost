@@ -240,6 +240,8 @@ void Button_Port_Tick_Handler(void) {
 | `void LCD_Init(void)` | - | 初始化屏幕 |
 | `void LCD_Clear(uint16_t color)` | color: 颜色值 | 清屏 |
 | `void LCD_Fill(uint16_t x, y, w, h, uint16_t color)` | 位置/宽高/颜色 | 填充矩形 |
+| `void LCD_FillRoundRect(uint16_t x, y, w, h, r, uint16_t color)` | 位置/宽高/圆角半径/颜色 | 填充圆角矩形 |
+| `void LCD_DrawRoundRect(uint16_t x, y, w, h, r, uint16_t color)` | 位置/宽高/圆角半径/颜色 | 绘制空心圆角矩形框（仅 1px 边框） |
 | `void LCD_DrawPoint(uint16_t x, y, uint16_t color)` | 坐标/颜色 | 画点 |
 | `void LCD_DrawImage(uint16_t x, y, w, h, uint16_t *data)` | 位置/宽高/数据 | 绘制图片 |
 | `void LCD_DrawChar(...)` | x,y,ch,font,fg,bg | 绘制ASCII字符 |

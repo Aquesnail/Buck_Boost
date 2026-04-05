@@ -7,7 +7,7 @@
 // ==========================================
 // 1. 内部缓冲区定义 (10行缓存)
 // ==========================================
-#define LCD_BUF_SIZE (240 * 10)
+#define LCD_BUF_SIZE (230 * 24)
 static uint16_t lcd_buffer[LCD_BUF_SIZE];
 
 // ==========================================
@@ -143,6 +143,50 @@ void LCD_FillRoundRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t 
         LCD_Fill(seg_x_right, y_top,    seg_w, 1, color);
         LCD_Fill(seg_x_left,  y_bottom, seg_w, 1, color);
         LCD_Fill(seg_x_right, y_bottom, seg_w, 1, color);
+    }
+}
+
+/**
+ * @brief 绘制空心圆角矩形 (仅画 1px 边框线)
+ */
+void LCD_DrawRoundRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t r, uint16_t color) {
+    if (r > w / 2) r = w / 2;
+    if (r > h / 2) r = h / 2;
+    if (w == 0 || h == 0) return;
+
+    /* 上下横线 (中间主体，不含圆角尖) */
+    if (w > 2 * r) {
+        uint16_t line_w = w - 2 * r;
+        LCD_Fill(x + r, y,          line_w, 1, color); /* 上边 */
+        LCD_Fill(x + r, y + h - 1,  line_w, 1, color); /* 下边 */
+    }
+
+    /* 左右竖线 (中间主体，不含圆角尖) */
+    if (h > 2 * r) {
+        uint16_t line_h = h - 2 * r;
+        LCD_Fill(x,         y + r, 1, line_h, color); /* 左边 */
+        LCD_Fill(x + w - 1, y + r, 1, line_h, color); /* 右边 */
+    }
+
+    /* 四个圆角边框点 */
+    for (uint16_t i = 0; i < r; i++) {
+        uint16_t edge = r - 1 - i; /* 从外向内递减 */
+        uint16_t y_top    = y + i;
+        uint16_t y_bottom = y + h - 1 - i;
+        uint16_t x_left   = x + edge;
+        uint16_t x_right  = x + w - 1 - edge;
+
+        /* 当 w/h 很小时避免重复画点 */
+        LCD_DrawPoint(x_left,  y_top,    color); /* 左上 */
+        if (x_right != x_left) {
+            LCD_DrawPoint(x_right, y_top,    color); /* 右上 */
+        }
+        if (y_bottom != y_top) {
+            LCD_DrawPoint(x_left,  y_bottom, color); /* 左下 */
+            if (x_right != x_left) {
+                LCD_DrawPoint(x_right, y_bottom, color); /* 右下 */
+            }
+        }
     }
 }
 
