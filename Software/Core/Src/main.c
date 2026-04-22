@@ -161,10 +161,11 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
   HAL_TIM_Base_Start(&htim1);
  // __HAL_TIM_SET_COUNTER(&htim1, 32768);
-  SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_1, 6801);
+  SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_1, 12440);
   __HAL_TIM_MOE_ENABLE(&htim8);
-  SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_3, 6801);
-
+  SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_3, 12440);
+//13600满占空比
+ 
 //   // 3. 静态色彩测试 (利用缓冲区中转，刷屏会比之前更快)
 //   LCD_Clear(ST7789_COLOR_RED);
 //   //HAL_Delay(500);

@@ -227,6 +227,17 @@ static void Page_Output_Draw(void) {
     uint16_t fg = ST7789_COLOR_WHITE;
     uint16_t box_color = ST7789_COLOR_YELLOW;
 
+    char buf[64];
+
+    /* 实时测量值 — 显示在页面上方 */
+    sprintf(buf, "Vin:%.2fV Vout:%.2fV Iin:%.3fA",
+            powerMeas.vin, powerMeas.vout, powerMeas.iin);
+    LCD_DrawString(5, 2, buf, LABEL_FONT, fg, bg);
+
+    sprintf(buf, "Iout:%.3fA IL:%.3fA",
+            powerMeas.iout, powerMeas.inductor_i);
+    LCD_DrawString(5, 20, buf, LABEL_FONT, fg, bg);
+
     static const uint16_t val_x    = 80;
     static const uint16_t val_y_v  = 55;
     static const uint16_t val_y_i  = 135;
