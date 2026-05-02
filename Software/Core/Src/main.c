@@ -26,7 +26,6 @@
 #include "i2c.h"
 #include "spi.h"
 #include "tim.h"
-#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -65,7 +64,7 @@ uint8_t test_tick=0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-#define SET_PWM_DUTY_HIGH_RES(HANDLE, CH, VALUE)  __HAL_TIM_SET_COMPARE(HANDLE, CH, VALUE)
+
 
 // 使用示例：设置一个 50.06% 的微调占空比
 // 50% 对应 425*16 = 6800，多加 1 个细分步进 = 6801
@@ -117,7 +116,7 @@ int main(void)
   MX_I2C3_Init();
   MX_TIM16_Init();
   MX_TIM17_Init();
-  MX_USART2_UART_Init();
+
   MX_COMP4_Init();
   MX_TIM1_Init();
   MX_TIM7_Init();
@@ -161,6 +160,7 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
   HAL_TIM_Base_Start(&htim1);
  // __HAL_TIM_SET_COUNTER(&htim1, 32768);
+ #define SET_PWM_DUTY_HIGH_RES(HANDLE, CH, VALUE)  __HAL_TIM_SET_COMPARE(HANDLE, CH, VALUE)
   SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_1, 12440);
   __HAL_TIM_MOE_ENABLE(&htim8);
   SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_3, 12440);

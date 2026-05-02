@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "adc.h"
 
+
 // --- 配置参数 ---
 #define ADC1_CH_NUM    2    // ADC1 有 2 个通道
 #define ADC2_CH_NUM    4    // ADC2 有 4 个通道
@@ -73,7 +74,55 @@ adc_voltages[3],ADC2 Rank 2,IN4,ADC_I_IN,输入电流
 adc_voltages[4],ADC2 Rank 3,IN3,ADC_VIN,输入电压
 adc_voltages[5],ADC2 Rank 4,IN13,TEMP,温度采样
 */
+// (849 * 16) + 15 = 13599
+#define PWM_RESOLUTION_MAX    13599.0f 
+// 自举电容充电所需的最小关断时间比例 (10%)
+#define BOOTSTRAP_MIN_RECHARGE_RATIO 0.10f
 
+
+ #define SET_PWM_DUTY_HIGH_RES(HANDLE, CH, VALUE)  __HAL_TIM_SET_COMPARE(HANDLE, CH, VALUE)
+
+/**
+ * @brief 更新 Buck 占空比 (0.0 ~ 1.0)
+ * @param duty: 目标占空比。0.9 代表上管导通 90%。
+ */
+void Update_Buck_Duty(float duty) {
+    // 1. 安全限幅：因为自举限制，上管最大只能开到 90%
+    if (duty > (1.0f - BOOTSTRAP_MIN_RECHARGE_RATIO)) {
+        duty = 1.0f - BOOTSTRAP_MIN_RECHARGE_RATIO;
+    }
+    if (duty < 0.0f) duty = 0.0f;
+
+    // 2. 映射计算：Buck 上管占空比 = 1 - (CCR1 / MAX)
+    // 所以 CCR1 = MAX * (1 - duty)
+    uint32_t ccr_value = (uint32_t)(PWM_RESOLUTION_MAX * (1.0f - duty));
+
+    // 3. 写入寄存器
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, ccr_value);
+}
+
+/**
+ * @brief 更新 Boost 占空比 (0.0 ~ 1.0)
+ * @param duty: 目标占空比。0.1 代表下管导通 10%。
+ */
+void Update_Boost_Duty(float duty) {
+    // 1. 安全限幅：为了给 Boost 上管自举充电，下管最大只能开到 90%
+    if (duty > (1.0f - BOOTSTRAP_MIN_RECHARGE_RATIO)) {
+        duty = 1.0f - BOOTSTRAP_MIN_RECHARGE_RATIO;
+    }
+    if (duty < 0.0f) duty = 0.0f;
+
+    // 2. 映射计算：Boost 下管占空比 = CCR3 / MAX
+    uint32_t ccr_value = (uint32_t)(PWM_RESOLUTION_MAX * duty);
+
+    // 3. 写入寄存器
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, ccr_value);
+}
+
+
+static float buck_duty_int = 0.0f; 
+const float Ts = 0.0001f; // 10kHz 采样周期
+uint32_t tt=0;
 void Control_Tick_Hook(void){
     
     powerState.pi_ki = 1.0f;
@@ -87,9 +136,35 @@ void Control_Tick_Hook(void){
 
     powerMeas.inductor_i = adc_voltages[0]*20.0f/100.0f;
     powerMeas.iout = adc_voltages[1]*20.0f/100.0f;
-    powerState.target_i = 1.22f;
-    powerState.target_v = 1.552f;
+    powerState.target_i = 2.22f;
+    powerState.target_v = 5.2f;
+
+    float target_v = 5.2f;
+    float current_v = powerMeas.vout;
+    float err = target_v - current_v;
+
+    // --- 调整后的 PI 计算 ---
+    float Kp = 0.15f;  // 降低 Kp，避开谐振点震荡
+    float Ki = 150.0f; // Ki 对应连续域的增益，乘上 Ts 后才是每步步进
+
+    // 积分项更新 (显式包含 Ts)
+    buck_duty_int += Ki * err * Ts;
+
+    // 抗饱和限幅
+    if (buck_duty_int > 0.85f) buck_duty_int = 0.85f;
+    if (buck_duty_int < 0.0f)  buck_duty_int = 0.0f;
+
+    float duty_out = (Kp * err) + buck_duty_int;
+
+    // 最终输出限幅
+    if (duty_out > 0.9f) duty_out = 0.9f;
+    if (duty_out < 0.0f) duty_out = 0.0f;
+
+    Update_Buck_Duty(duty_out);
+    Update_Boost_Duty(0.1f); // 维持自举充电
 }
+
+
 
 
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
