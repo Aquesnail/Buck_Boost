@@ -5,7 +5,47 @@
 #include "ui_data.h"
 #include <stdint.h>
 #include "adc.h"
+#include <math.h> // 需要用到 M_PI，或者自己定义宏
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+// 定义低通滤波器结构体
+typedef struct {
+    float out;      // 上一次的输出 Y[n-1]
+    float alpha;    // 滤波系数
+    uint8_t init;   // 初始化标志，防止系统启动时由于 out 为 0 导致巨大的阶跃
+} FirstOrderLPF_t;
+
+/**
+ * @brief 初始化/更新滤波器的截止频率
+ * @param lpf 滤波器实例
+ * @param fc_hz 截止频率 (Hz)
+ * @param Ts 采样周期 (s)
+ */
+void LPF_CalcAlpha(FirstOrderLPF_t *lpf, float fc_hz, float Ts) {
+    // 根据公式计算 alpha
+    lpf->alpha = (2.0f * M_PI * fc_hz * Ts) / (1.0f + 2.0f * M_PI * fc_hz * Ts);
+}
+
+/**
+ * @brief 执行单次滤波
+ * @param lpf 滤波器实例
+ * @param input 最新采样值
+ * @return 滤波后的值
+ */
+float LPF_Update(FirstOrderLPF_t *lpf, float input) {
+    if (lpf->init == 0) {
+        // 第一次运行，直接将当前值赋给 out，避免从 0 开始缓慢爬升
+        lpf->out = input;
+        lpf->init = 1;
+    } else {
+        // Y[n] = α * X[n] + (1-α) * Y[n-1]
+        lpf->out = (lpf->alpha * input) + ((1.0f - lpf->alpha) * lpf->out);
+    }
+    return lpf->out;
+}
 
 // --- 配置参数 ---
 #define ADC1_CH_NUM    2    // ADC1 有 2 个通道
@@ -32,8 +72,10 @@ void SetBoostDuty(float duty){
 void Control_Init(void){
     // ADC1: 2通道 * 4深度 = 8 个 Halfword
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer1, ADC1_CH_NUM * BUF_DEPTH);
-    powerState.target_i = 2.22f;
     powerState.target_v = 5.2f;
+    powerState.target_i = 2.0f;
+    powerState.pi_ki = 150.0f;
+    powerState.pi_kp = 0.15f;
     // ADC2: 4通道 * 4深度 = 16 个 Halfword
     // 注意：你之前的 adc_buffer2[12] 长度不够 16，会导致内存溢出，已修正
     HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer2, ADC2_CH_NUM * BUF_DEPTH);
@@ -124,28 +166,60 @@ void Update_Boost_Duty(float duty) {
 static float buck_duty_int = 0.0f; 
 const float Ts = 0.0001f; // 10kHz 采样周期
 uint32_t tt=0;
+static FirstOrderLPF_t vout_lpf = {0, 0, 0}; // 定义 Vout 的低通滤波器
+static uint8_t ctrl_initialized = 0;
+
+#define STARTUP_DELAY_MS    20.0f
+#define STARTUP_DELAY_TICKS (uint32_t)(STARTUP_DELAY_MS / (Ts * 1000.0f)) // 计算得 200
+// --- 静态变量 ---
+static uint32_t startup_counter = 0;
+static uint8_t is_power_ready = 0;
 
 void Control_Tick_Hook(void){
+    // 1. 初始化控制参数（仅执行一次）
+    if (!ctrl_initialized) {
+        // Ts = 0.0001f (10kHz)
+        // fc = 1000.0f Hz (建议设置为你期望穿越频率的 5~10 倍)
+        LPF_CalcAlpha(&vout_lpf, 1500.0f, Ts); 
+        ctrl_initialized = 1;
+    }
     
-    powerState.pi_ki = 1.0f;
-    powerState.pi_kp = 1.0f;
-    powerState.output_en = 1;
+    // powerState.pi_ki = 1.0f;
+    // powerState.pi_kp = 1.0f;
+    // powerState.output_en = 1;
 
-    powerMeas.vout = adc_voltages[2]*12.0f;
-    powerMeas.iin = -(adc_voltages[3]-1.606f)*200.0f/100.0f;
+    //powerMeas.vout = adc_voltages[2]*12.0f;
+    powerMeas.iin = (adc_voltages[3]-1.65f)*200.0f/100.0f;
     powerMeas.vin = adc_voltages[4]*12.0f;
     powerMeas.temp = adc_voltages[5];
 
     powerMeas.inductor_i = adc_voltages[0]*20.0f/100.0f;
-    powerMeas.iout = -(adc_voltages[1]-1.585)*200.0f/100.0f;
-    
+    powerMeas.iout = -(adc_voltages[1]-1.608)*200.0f/100.0f;
+
+    float raw_vout = adc_voltages[2] * 12.0f;
+    powerMeas.vout = LPF_Update(&vout_lpf, raw_vout);
+
+    if (startup_counter < STARTUP_DELAY_TICKS) {
+        startup_counter++;
+        
+        // --- 在等待期执行的操作 ---
+        Update_Buck_Duty(0.0f);   // 强制关断 Buck 上管
+        Update_Boost_Duty(0.1f);  // 仅维持最低占空比给自举电容充电
+        
+        buck_duty_int = 0.0f;     // 重要：在等待期不断重置积分项，防止积分过热
+        is_power_ready = 0;
+        return;                   // 跳过本次 PI 计算
+    } else {
+        is_power_ready = 1;       // 过了 20ms，标记为就绪
+    }
+
     float target_v = powerState.target_v;
     float current_v = powerMeas.vout;
     float err = target_v - current_v;
-    
+
     // --- 调整后的 PI 计算 ---
-    float Kp = 0.15f;  // 降低 Kp，避开谐振点震荡
-    float Ki = 150.0f; // Ki 对应连续域的增益，乘上 Ts 后才是每步步进
+    float Kp = 0.01f;  // 降低 Kp，避开谐振点震荡
+    float Ki = 15.0f; // Ki 对应连续域的增益，乘上 Ts 后才是每步步进
 
     // 积分项更新 (显式包含 Ts)
     buck_duty_int += Ki * err * Ts;
@@ -160,8 +234,10 @@ void Control_Tick_Hook(void){
     if (duty_out > 0.9f) duty_out = 0.9f;
     if (duty_out < 0.0f) duty_out = 0.0f;
 
-    Update_Buck_Duty(duty_out);
-    Update_Boost_Duty(0.1f); // 维持自举充电
+    if(is_power_ready){
+        Update_Buck_Duty(duty_out);
+        Update_Boost_Duty(0.1f); // 维持自举充电
+    }
 }
 
 
