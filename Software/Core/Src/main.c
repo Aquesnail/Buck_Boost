@@ -116,7 +116,6 @@ int main(void)
   MX_I2C3_Init();
   MX_TIM16_Init();
   MX_TIM17_Init();
-
   MX_COMP4_Init();
   MX_TIM1_Init();
   MX_TIM7_Init();
@@ -158,7 +157,7 @@ int main(void)
   //HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
-  HAL_TIM_Base_Start(&htim1);
+  //HAL_TIM_Base_Start(&htim1);
  // __HAL_TIM_SET_COUNTER(&htim1, 32768);
  #define SET_PWM_DUTY_HIGH_RES(HANDLE, CH, VALUE)  __HAL_TIM_SET_COMPARE(HANDLE, CH, VALUE)
   SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_1, 12440);

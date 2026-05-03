@@ -32,7 +32,8 @@ void SetBoostDuty(float duty){
 void Control_Init(void){
     // ADC1: 2通道 * 4深度 = 8 个 Halfword
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer1, ADC1_CH_NUM * BUF_DEPTH);
-    
+    powerState.target_i = 2.22f;
+    powerState.target_v = 5.2f;
     // ADC2: 4通道 * 4深度 = 16 个 Halfword
     // 注意：你之前的 adc_buffer2[12] 长度不够 16，会导致内存溢出，已修正
     HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer2, ADC2_CH_NUM * BUF_DEPTH);
@@ -123,6 +124,7 @@ void Update_Boost_Duty(float duty) {
 static float buck_duty_int = 0.0f; 
 const float Ts = 0.0001f; // 10kHz 采样周期
 uint32_t tt=0;
+
 void Control_Tick_Hook(void){
     
     powerState.pi_ki = 1.0f;
@@ -130,19 +132,17 @@ void Control_Tick_Hook(void){
     powerState.output_en = 1;
 
     powerMeas.vout = adc_voltages[2]*12.0f;
-    powerMeas.iin = (adc_voltages[3]-1.65f)*20.0f/100.0f;
+    powerMeas.iin = -(adc_voltages[3]-1.606f)*200.0f/100.0f;
     powerMeas.vin = adc_voltages[4]*12.0f;
     powerMeas.temp = adc_voltages[5];
 
     powerMeas.inductor_i = adc_voltages[0]*20.0f/100.0f;
-    powerMeas.iout = adc_voltages[1]*20.0f/100.0f;
-    powerState.target_i = 2.22f;
-    powerState.target_v = 5.2f;
-
-    float target_v = 5.2f;
+    powerMeas.iout = -(adc_voltages[1]-1.585)*200.0f/100.0f;
+    
+    float target_v = powerState.target_v;
     float current_v = powerMeas.vout;
     float err = target_v - current_v;
-
+    
     // --- 调整后的 PI 计算 ---
     float Kp = 0.15f;  // 降低 Kp，避开谐振点震荡
     float Ki = 150.0f; // Ki 对应连续域的增益，乘上 Ts 后才是每步步进

@@ -17,6 +17,10 @@ uint16_t Encoder_Get_Position(void) {
 int16_t Encoder_Get_Delta(void) {
     uint16_t curr = (uint16_t)__HAL_TIM_GET_COUNTER(&htim1);
     int16_t delta = (int16_t)(curr - last_cnt);
-    last_cnt = curr;
-    return delta;
+    if(delta >=4 || delta <=-4){
+        last_cnt = curr;
+        return delta/4;
+    }else{
+        return 0;
+    }
 }
