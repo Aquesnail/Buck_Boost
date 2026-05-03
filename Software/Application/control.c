@@ -52,7 +52,11 @@ typedef struct {
 static PI_Controller_t buck_pi  = {0.01f, 15.0f, 0.0f};
 static PI_Controller_t boost_pi = {0.01f, 15.0f, 0.0f};
 
+// --- 恒流环 (CC) PI 控制器 ---
+static PI_Controller_t cc_pi = {0.2f, 20.0f, 0.0f};
+
 static PowerMode_t current_mode = MODE_BUCK;
+static uint8_t uvlo_fault = 0;
 
 // --- PWM 参数 ---
 #define PWM_RESOLUTION_MAX        13599.0f
@@ -137,9 +141,16 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
     }
 }
 
+// --- PWM 安全接管函数 ---
+void Power_Set_Safe_PWM(void) {
+    Update_Buck_Duty(0.0f);
+    Update_Boost_Duty(0.0f);
+}
+
 // --- 主控制 tick ---
 void Control_Tick_Hook(void) {
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3,GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+
     // 1. 初始化（仅执行一次）
     if (!ctrl_initialized) {
         LPF_CalcAlpha(&vout_lpf, 1500.0f, Ts);
@@ -149,16 +160,46 @@ void Control_Tick_Hook(void) {
 
     // 2. ADC 换算
     powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
-     
     powerMeas.temp = adc_voltages[5];
     powerMeas.inductor_i = adc_voltages[0] * 20.0f / 100.0f;
-    powerMeas.iout = -(adc_voltages[1] - 1.608f) * 200.0f / 100.0f * 0.9029-0.035716;
-    //powerMeas.iout = adc_voltages[1];
+    powerMeas.iout = -(adc_voltages[1] - 1.608f) * 200.0f / 100.0f * 0.9029f - 0.035716f;
+
     float raw_vout = adc_voltages[2] * 12.0f;
     float raw_vin  = adc_voltages[4] * 12.0f;
     powerMeas.vout = LPF_Update(&vout_lpf, raw_vout);
-    powerMeas.vin = LPF_Update(&vin_lpf, raw_vin);
-    // 3. 软启动等待
+    powerMeas.vin  = LPF_Update(&vin_lpf, raw_vin);
+
+    float target_v = powerState.target_v;
+    float vin = powerMeas.vin;
+    float current_v = powerMeas.vout;
+
+    // ==========================================
+    // 3. UVLO 欠压保护逻辑 (带滞环)
+    // ==========================================
+    if (!uvlo_fault) {
+        if (vin < 5.0f) {
+            uvlo_fault = 1;
+        }
+    } else {
+        if (vin > 6.0f) {
+            uvlo_fault = 0;
+            startup_counter = 0;
+            is_power_ready = 0;
+            buck_pi.integral = 0.0f;
+            boost_pi.integral = 0.0f;
+            cc_pi.integral = 0.0f;
+        }
+    }
+
+    if (uvlo_fault) {
+        Power_Set_Safe_PWM();
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+        return;
+    }
+
+    // ==========================================
+    // 4. 软启动等待
+    // ==========================================
     if (startup_counter < STARTUP_DELAY_TICKS) {
         startup_counter++;
         Update_Buck_Duty(0.0f);
@@ -166,9 +207,9 @@ void Control_Tick_Hook(void) {
 
         buck_pi.integral = 0.0f;
         boost_pi.integral = 0.0f;
+        cc_pi.integral = 0.0f;
         is_power_ready = 0;
 
-        // 启动时强制决断一次模式，防止启动错乱
         if (powerMeas.vin > powerState.target_v) {
             current_mode = MODE_BUCK;
         } else {
@@ -179,28 +220,40 @@ void Control_Tick_Hook(void) {
         is_power_ready = 1;
     }
 
-    float target_v = powerState.target_v;
-    float current_v = powerMeas.vout;
-    float err = target_v - current_v;
-    float vin = powerMeas.vin;
+    float target_i = powerState.target_i;
+    float current_i = powerMeas.iout;
 
-    // 4. 滞环状态机 (修正死区与前馈版)
+    // ==========================================
+    // 5. 恒流环 (CC Loop) 计算
+    // ==========================================
+    float err_i = current_i - target_i;
 
-    // Buck 稳压极限阈值 (考虑 0.9 最大占空比和压降余量)
+    if (err_i > 0.0f || cc_pi.integral > 0.0f) {
+        cc_pi.integral += cc_pi.ki * err_i * Ts;
+        if (cc_pi.integral < 0.0f) cc_pi.integral = 0.0f;
+        if (cc_pi.integral > target_v) cc_pi.integral = target_v;
+    }
+
+    float dynamic_target_v = target_v - cc_pi.integral;
+    if (err_i > 0.0f) {
+        dynamic_target_v -= cc_pi.kp * err_i;
+    }
+    if (dynamic_target_v < 0.0f) dynamic_target_v = 0.0f;
+
+    float err = dynamic_target_v - current_v;
+
+    // ==========================================
+    // 6. 滞环状态机
+    // ==========================================
     float switch_to_boost_threshold = target_v + 0.6f;
     float switch_to_buck_threshold  = switch_to_boost_threshold + HYST_BAND_V;
 
     if (current_mode == MODE_BUCK) {
         if (vin < switch_to_boost_threshold) {
             current_mode = MODE_BOOST;
-
-            // 动态前馈计算：物理上需要的占空比 D = 1 - (Vin_effective / Vout)
-            // Buck 固定在 0.9 占空比，Vin_effective = vin * 0.9
             float expected_duty = 1.0f - ((vin * 0.9f) / target_v);
-
             if (expected_duty < 0.1f) expected_duty = 0.1f;
             if (expected_duty > 0.5f) expected_duty = 0.5f;
-
             boost_pi.integral = expected_duty;
         }
     } else {
@@ -210,15 +263,15 @@ void Control_Tick_Hook(void) {
         }
     }
 
-    // 5. 双模独立 PI 控制
+    // ==========================================
+    // 7. 双模独立 PI 控制
+    // ==========================================
     if (current_mode == MODE_BUCK) {
         buck_pi.integral += buck_pi.ki * err * Ts;
-
         if (buck_pi.integral > 0.85f) buck_pi.integral = 0.85f;
         if (buck_pi.integral < 0.0f)  buck_pi.integral = 0.0f;
 
         float duty_out = (buck_pi.kp * err) + buck_pi.integral;
-
         if (duty_out > 0.9f) duty_out = 0.9f;
         if (duty_out < 0.0f) duty_out = 0.0f;
 
@@ -228,12 +281,10 @@ void Control_Tick_Hook(void) {
         }
     } else {
         boost_pi.integral += boost_pi.ki * err * Ts;
-
         if (boost_pi.integral > 0.80f) boost_pi.integral = 0.80f;
         if (boost_pi.integral < 0.0f)  boost_pi.integral = 0.0f;
 
         float duty_out = (boost_pi.kp * err) + boost_pi.integral;
-
         if (duty_out > 0.85f) duty_out = 0.85f;
         if (duty_out < 0.0f)  duty_out = 0.0f;
 
@@ -242,5 +293,5 @@ void Control_Tick_Hook(void) {
             Update_Boost_Duty(duty_out);
         }
     }
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3,GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
 }
