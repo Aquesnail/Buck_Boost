@@ -96,6 +96,7 @@ float adc_voltages[6];
 static const float Ts = 0.0001f;       // 10kHz 采样周期
 static FirstOrderLPF_t vout_lpf = {0, 0, 0};
 static FirstOrderLPF_t vin_lpf = {0, 0, 0};
+static FirstOrderLPF_t iin_lpf = {0, 0, 0};
 static uint8_t ctrl_initialized = 0;
 static uint32_t startup_counter = 0;
 static uint8_t is_power_ready = 0;
@@ -107,8 +108,8 @@ static uint8_t is_power_ready = 0;
 void Control_Init(void) {
     HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer1, ADC1_CH_NUM * BUF_DEPTH);
     HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer2, ADC2_CH_NUM * BUF_DEPTH);
-    powerState.target_v = 5.2f;
-    powerState.target_i = 2.0f;
+    powerState.target_v = 12.0f;
+    powerState.target_i = 3.0f;
     powerState.pi_ki = 150.0f;
     powerState.pi_kp = 0.15f;
 }
@@ -155,19 +156,22 @@ void Control_Tick_Hook(void) {
     if (!ctrl_initialized) {
         LPF_CalcAlpha(&vout_lpf, 1500.0f, Ts);
         LPF_CalcAlpha(&vin_lpf, 1500.0f, Ts);
+        LPF_CalcAlpha(&iin_lpf, 500.0f, Ts);
         ctrl_initialized = 1;
     }
 
     // 2. ADC 换算
-    powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
+    //powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
     powerMeas.temp = adc_voltages[5];
     powerMeas.inductor_i = adc_voltages[0] * 20.0f / 100.0f;
     powerMeas.iout = -(adc_voltages[1] - 1.608f) * 200.0f / 100.0f * 0.9029f - 0.035716f;
 
     float raw_vout = adc_voltages[2] * 12.0f;
-    float raw_vin  = adc_voltages[4] * 12.0f;
+    float raw_vin  = adc_voltages[4] * 12.0f + 0.0965f;
+    float raw_iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
     powerMeas.vout = LPF_Update(&vout_lpf, raw_vout);
     powerMeas.vin  = LPF_Update(&vin_lpf, raw_vin);
+    powerMeas.iin  = LPF_Update(&iin_lpf, raw_iin);
 
     float target_v = powerState.target_v;
     float vin = powerMeas.vin;
