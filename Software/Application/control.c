@@ -163,7 +163,7 @@ void Control_Tick_Hook(void) {
     // 2. ADC 换算
     //powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
     powerMeas.temp = adc_voltages[5];
-    powerMeas.inductor_i = adc_voltages[0] * 20.0f / 100.0f;
+    powerMeas.inductor_i = adc_voltages[0]; // 20.0f / 100.0f;
     powerMeas.iout = -(adc_voltages[1] - 1.608f) * 200.0f / 100.0f * 0.9029f - 0.035716f;
 
     float raw_vout = adc_voltages[2] * 12.0f;

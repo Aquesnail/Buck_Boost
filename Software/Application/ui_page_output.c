@@ -149,15 +149,40 @@ static void ApplyDigitDelta(float *val, float max_val, uint8_t d_idx, int16_t de
     if (milli < 0) milli = 0;
     if (milli > max_milli) milli = max_milli;
 
-    int32_t mult = digit_multipliers[d_idx];
-    int8_t old_d = (int8_t)((milli / mult) % 10);
-    int8_t step = (delta > 0) ? 1 : -1;
-    int new_d = old_d + step;
-    if (new_d > 9) new_d = 0;
-    if (new_d < 0) new_d = 9;
+    /* 将当前值分解为每位数字 */
+    int digits[DIGIT_COUNT];
+    int32_t temp_milli = milli;
+    for (int i = 0; i < DIGIT_COUNT; i++) {
+        digits[i] = (temp_milli / digit_multipliers[i]) % 10;
+        if (temp_milli >= digit_multipliers[i]) {
+            temp_milli = temp_milli % digit_multipliers[i];
+        }
+    }
 
-    int32_t new_milli = milli + (new_d - old_d) * mult;
-    if (new_milli < 0 || new_milli > max_milli) return; /* 拒绝导致超限的修改 */
+    /* 从当前修改位开始进位/借位传播 */
+    int step = (delta > 0) ? 1 : -1;
+    int carry = step;
+    for (int i = d_idx; i >= 0 && carry != 0; i--) {
+        int new_d = digits[i] + carry;
+        if (new_d > 9) {
+            digits[i] = new_d - 10;
+            carry = 1;
+        } else if (new_d < 0) {
+            digits[i] = new_d + 10;
+            carry = -1;
+        } else {
+            digits[i] = new_d;
+            carry = 0;
+        }
+    }
+
+    /* 检查结果是否在有效范围内 */
+    int32_t new_milli = 0;
+    for (int i = 0; i < DIGIT_COUNT; i++) {
+        new_milli += digits[i] * digit_multipliers[i];
+    }
+
+    if (new_milli < 0 || new_milli > max_milli) return;
     *val = (float)new_milli / 1000.0f;
 }
 
