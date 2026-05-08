@@ -49,7 +49,7 @@ typedef struct {
 } PI_Controller_t;
 
 // --- Buck / Boost 独立 PI 控制器 ---
-static PI_Controller_t buck_pi  = {0.01f, 15.0f, 0.0f};
+static PI_Controller_t buck_pi  = {0.005f, 5.0f, 0.0f};
 static PI_Controller_t boost_pi = {0.01f, 15.0f, 0.0f};
 
 // --- 恒流环 (CC) PI 控制器 ---
@@ -164,11 +164,11 @@ void Control_Tick_Hook(void) {
     //powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
     powerMeas.temp = adc_voltages[5];
     powerMeas.inductor_i = adc_voltages[0]; // 20.0f / 100.0f;
-    powerMeas.iout = -(adc_voltages[1] - 1.608f) * 200.0f / 100.0f * 0.9029f - 0.035716f;
+    powerMeas.iout = (adc_voltages[1]-1.578)*(-3.95);//(adc_voltages[1]-1.5652f)*(-3.9717f);
 
     float raw_vout = adc_voltages[2] * 12.0f;
     float raw_vin  = adc_voltages[4] * 12.0f + 0.0965f;
-    float raw_iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
+    float raw_iin = (adc_voltages[3]);
     powerMeas.vout = LPF_Update(&vout_lpf, raw_vout);
     powerMeas.vin  = LPF_Update(&vin_lpf, raw_vin);
     powerMeas.iin  = LPF_Update(&iin_lpf, raw_iin);
