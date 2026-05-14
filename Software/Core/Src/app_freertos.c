@@ -53,7 +53,7 @@ osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
+  .stack_size = 256 * 4
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -123,7 +123,7 @@ void StartDefaultTask(void *argument)
   {
     Button_Port_Tick_Handler();
     UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
-    // UI_Draw_Handler();  // UI 渲染（每 10ms 执行一次） // TODO: 调试用，暂时禁用
+    UI_Draw_Handler();  // UI 屏幕刷新（当前页面的 Draw）
     osDelay(10);
   }
   /* USER CODE END StartDefaultTask */

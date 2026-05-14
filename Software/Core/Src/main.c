@@ -144,7 +144,7 @@ int main(void)
   Control_Init();
   // 2. 初始化 UI 框架并注册页面
   UI_Init();
-  UI_Page_t *pages[] = {
+  static UI_Page_t *pages[] = {
       &ui_page_output,
       &ui_page_control,
   };

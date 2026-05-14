@@ -5,7 +5,7 @@
 
 /* 心跳分频目标周期：假设 UI_Tick_Handler 每 1ms 被调用一次 */
 #ifndef UI_TICK_PERIOD_MS
-#define UI_TICK_PERIOD_MS  10
+#define UI_TICK_PERIOD_MS  1
 #endif
 
 static UI_Page_t **page_table = NULL;
