@@ -57,7 +57,8 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+extern void control_current();
+extern void control_voltage();
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -67,8 +68,9 @@ extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern DMA_HandleTypeDef hdma_spi2_tx;
 extern TIM_HandleTypeDef htim1;
-extern TIM_HandleTypeDef htim7;
 extern TIM_HandleTypeDef htim17;
+extern TIM_HandleTypeDef htim2;
+
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -152,19 +154,6 @@ void UsageFault_Handler(void)
 }
 
 /**
-  * @brief This function handles System service call via SWI instruction.
-  */
-void SVC_Handler(void)
-{
-  /* USER CODE BEGIN SVCall_IRQn 0 */
-
-  /* USER CODE END SVCall_IRQn 0 */
-  /* USER CODE BEGIN SVCall_IRQn 1 */
-
-  /* USER CODE END SVCall_IRQn 1 */
-}
-
-/**
   * @brief This function handles Debug monitor.
   */
 void DebugMon_Handler(void)
@@ -175,33 +164,6 @@ void DebugMon_Handler(void)
   /* USER CODE BEGIN DebugMonitor_IRQn 1 */
 
   /* USER CODE END DebugMonitor_IRQn 1 */
-}
-
-/**
-  * @brief This function handles Pendable request for system service.
-  */
-void PendSV_Handler(void)
-{
-  /* USER CODE BEGIN PendSV_IRQn 0 */
-
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
-
-  /* USER CODE END PendSV_IRQn 1 */
-}
-
-/**
-  * @brief This function handles System tick timer.
-  */
-void SysTick_Handler(void)
-{
-  /* USER CODE BEGIN SysTick_IRQn 0 */
-
-  /* USER CODE END SysTick_IRQn 0 */
-  HAL_IncTick();
-  /* USER CODE BEGIN SysTick_IRQn 1 */
-  
-  /* USER CODE END SysTick_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -274,7 +236,17 @@ void ADC1_2_IRQHandler(void)
 void TIM1_TRG_COM_TIM17_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_TRG_COM_TIM17_IRQn 0 */
-
+   if (__HAL_TIM_GET_FLAG(&htim17, TIM_FLAG_UPDATE) != RESET)
+  {
+      // 2. 检查中断使能位
+      if (__HAL_TIM_GET_IT_SOURCE(&htim17, TIM_IT_UPDATE) != RESET)
+      {
+          __HAL_TIM_CLEAR_IT( &htim17, TIM_IT_UPDATE); // 手动清除标志位
+          Button_Port_Tick_Handler();
+          UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
+          return;
+      }
+  }
   /* USER CODE END TIM1_TRG_COM_TIM17_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
   HAL_TIM_IRQHandler(&htim17);
@@ -284,17 +256,17 @@ void TIM1_TRG_COM_TIM17_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles TIM7 global interrupt.
+  * @brief This function handles TIM2 global interrupt.
   */
-void TIM7_IRQHandler(void)
+void TIM2_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM7_IRQn 0 */
+  /* USER CODE BEGIN TIM2_IRQn 0 */
 
-  /* USER CODE END TIM7_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim7);
-  /* USER CODE BEGIN TIM7_IRQn 1 */
+  /* USER CODE END TIM2_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim2);
+  /* USER CODE BEGIN TIM2_IRQn 1 */
 
-  /* USER CODE END TIM7_IRQn 1 */
+  /* USER CODE END TIM2_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
@@ -305,17 +277,5 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi){
   return;
 }
 
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
-  if(htim->Instance == htim17.Instance){
-    Button_Port_Tick_Handler();
-    UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
-  }
-}
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-  if(htim->Instance == htim7.Instance){
-    Control_Tick_Hook();
-  }
-  return;
-}
 /* USER CODE END 1 */

@@ -86,9 +86,9 @@ PowerState_t powerState = {0};
 
 #define ADC1_CH_NUM 2
 #define ADC2_CH_NUM 4
-#define BUF_DEPTH   4
+#define BUF_DEPTH   8
 
-uint16_t adc_buffer1[ADC1_CH_NUM * BUF_DEPTH];
+uint16_t adc_buffer1[ADC1_CH_NUM];
 uint16_t adc_buffer2[ADC2_CH_NUM * BUF_DEPTH];
 float adc_voltages[6];
 
@@ -106,34 +106,41 @@ static uint8_t is_power_ready = 0;
 
 // --- 初始化 ---
 void Control_Init(void) {
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer1, ADC1_CH_NUM * BUF_DEPTH);
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer1, ADC1_CH_NUM);
     HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer2, ADC2_CH_NUM * BUF_DEPTH);
     powerState.target_v = 12.0f;
     powerState.target_i = 3.0f;
     powerState.pi_ki = 150.0f;
     powerState.pi_kp = 0.15f;
 }
-
-// --- DMA 中断回调 ---
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-    if (hadc->Instance == ADC1) {
-        for (int ch = 0; ch < ADC1_CH_NUM; ch++) {
-            uint32_t sum = 0;
-            for (int i = 0; i < BUF_DEPTH; i++) {
-                sum += adc_buffer1[i * ADC1_CH_NUM + ch];
-            }
-            adc_voltages[ch] = ((float)sum / BUF_DEPTH) * 3.3f / 65535.0f * 2.0f;
-        }
+void control_current() {
+    // ADC1：无硬件过采样，2个通道，计算 BUF_DEPTH (4次) 的平均值
+  
+    // 转换为电压值 (假设 3.3V 参考电压，12位分辨率 4095)
+    adc_voltages[0] = (float)adc_buffer1[0] / BUF_DEPTH * (3.3f / 4095.0f);
+    adc_voltages[1] = (float)adc_buffer1[1] / BUF_DEPTH * (3.3f / 4095.0f);
+    
+    // 下面写你的电流环控制逻辑...
+}
+void Control_Tick_Hook(void);
+void control_voltage() {
+    // ADC2：硬件开启了 8 倍过采样，4个通道，计算 BUF_DEPTH (4次) 的平均值
+    uint32_t sum_ch[ADC2_CH_NUM] = {0};
+    
+    for (int i = 0; i < BUF_DEPTH; i++) {
+        sum_ch[0] += adc_buffer2[i * ADC2_CH_NUM + 0];
+        sum_ch[1] += adc_buffer2[i * ADC2_CH_NUM + 1];
+        sum_ch[2] += adc_buffer2[i * ADC2_CH_NUM + 2];
+        sum_ch[3] += adc_buffer2[i * ADC2_CH_NUM + 3];
     }
-    else if (hadc->Instance == ADC2) {
-        for (int ch = 0; ch < ADC2_CH_NUM; ch++) {
-            uint32_t sum = 0;
-            for (int i = 0; i < BUF_DEPTH; i++) {
-                sum += adc_buffer2[i * ADC2_CH_NUM + ch];
-            }
-            adc_voltages[ADC1_CH_NUM + ch] = ((float)sum / BUF_DEPTH) * 3.3f / 65535.0f * 2.0f;
-        }
-    }
+    
+    // 转换为电压值 (注意：硬件自带了8倍求和，所以这里要除以 BUF_DEPTH * 8.0f)
+    adc_voltages[2] = (float)sum_ch[0] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
+    adc_voltages[3] = (float)sum_ch[1] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
+    adc_voltages[4] = (float)sum_ch[2] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
+    adc_voltages[5] = (float)sum_ch[3] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
+    
+    Control_Tick_Hook();
 }
 
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
