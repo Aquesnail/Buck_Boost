@@ -64,11 +64,8 @@ extern void control_voltage();
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_adc1;
 extern DMA_HandleTypeDef hdma_adc2;
-extern ADC_HandleTypeDef hadc1;
-extern ADC_HandleTypeDef hadc2;
 extern DMA_HandleTypeDef hdma_spi2_tx;
 extern TIM_HandleTypeDef htim1;
-extern TIM_HandleTypeDef htim17;
 extern TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN EV */
@@ -193,7 +190,7 @@ void DMA1_Channel1_IRQHandler(void)
 void DMA1_Channel2_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
-
+  control_voltage();
   /* USER CODE END DMA1_Channel2_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_adc2);
   /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
@@ -207,7 +204,7 @@ void DMA1_Channel2_IRQHandler(void)
 void DMA1_Channel3_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
-
+  control_current();
   /* USER CODE END DMA1_Channel3_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_adc1);
   /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
@@ -216,40 +213,23 @@ void DMA1_Channel3_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles ADC1 and ADC2 global interrupt.
-  */
-void ADC1_2_IRQHandler(void)
-{
-  /* USER CODE BEGIN ADC1_2_IRQn 0 */
-
-  /* USER CODE END ADC1_2_IRQn 0 */
-  HAL_ADC_IRQHandler(&hadc1);
-  HAL_ADC_IRQHandler(&hadc2);
-  /* USER CODE BEGIN ADC1_2_IRQn 1 */
-
-  /* USER CODE END ADC1_2_IRQn 1 */
-}
-
-/**
   * @brief This function handles TIM1 trigger and commutation interrupts and TIM17 global interrupt.
   */
 void TIM1_TRG_COM_TIM17_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_TRG_COM_TIM17_IRQn 0 */
-   if (__HAL_TIM_GET_FLAG(&htim17, TIM_FLAG_UPDATE) != RESET)
-  {
-      // 2. 检查中断使能位
-      if (__HAL_TIM_GET_IT_SOURCE(&htim17, TIM_IT_UPDATE) != RESET)
-      {
-          __HAL_TIM_CLEAR_IT( &htim17, TIM_IT_UPDATE); // 手动清除标志位
-          Button_Port_Tick_Handler();
-          UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
-          return;
-      }
-  }
+  //  if (__HAL_TIM_GET_FLAG(&htim17, TIM_FLAG_UPDATE) != RESET)
+  // {
+  //     // 2. 检查中断使能位
+  //     if (__HAL_TIM_GET_IT_SOURCE(&htim17, TIM_IT_UPDATE) != RESET)
+  //     {
+  //         __HAL_TIM_CLEAR_IT( &htim17, TIM_IT_UPDATE); // 手动清除标志位
+         
+  //         return;
+  //     }
+  // }
   /* USER CODE END TIM1_TRG_COM_TIM17_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
-  HAL_TIM_IRQHandler(&htim17);
   /* USER CODE BEGIN TIM1_TRG_COM_TIM17_IRQn 1 */
 
   /* USER CODE END TIM1_TRG_COM_TIM17_IRQn 1 */

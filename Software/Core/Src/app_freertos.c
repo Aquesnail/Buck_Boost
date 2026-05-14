@@ -25,7 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ui_page_output.h"
+#include "button_port.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -114,10 +115,16 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
+  /* 等待 UI 框架初始化完成 */
+  osDelay(50);
+
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    Button_Port_Tick_Handler();
+    UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
+    // UI_Draw_Handler();  // UI 渲染（每 10ms 执行一次） // TODO: 调试用，暂时禁用
+    osDelay(10);
   }
   /* USER CODE END StartDefaultTask */
 }

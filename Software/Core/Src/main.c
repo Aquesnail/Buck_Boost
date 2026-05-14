@@ -117,7 +117,6 @@ int main(void)
   MX_SPI2_Init();
   MX_I2C3_Init();
   MX_TIM16_Init();
-  MX_TIM17_Init();
   MX_COMP4_Init();
   MX_TIM1_Init();
   MX_TIM7_Init();
@@ -155,7 +154,7 @@ int main(void)
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_3);
   HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start_IT(&htim17,TIM_CHANNEL_1 );
+  //HAL_TIM_PWM_Start_IT(&htim17,TIM_CHANNEL_1 );
   //HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
@@ -165,23 +164,25 @@ int main(void)
   SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_1, 12440);
   __HAL_TIM_MOE_ENABLE(&htim8);
   SET_PWM_DUTY_HIGH_RES(&htim8, TIM_CHANNEL_3, 12440);
+  
+  Power_Set_Safe_PWM();
 //13600满占空比
  
 //   // 3. 静态色彩测试 (利用缓冲区中转，刷屏会比之前更快)
-//   LCD_Clear(ST7789_COLOR_RED);
-//   //HAL_Delay(500);
-//   LCD_Clear(ST7789_COLOR_GREEN);
-//  // HAL_Delay(500);
-//   LCD_Clear(ST7789_COLOR_BLUE);
-//   //HAL_Delay(500);
+  // LCD_Clear(ST7789_COLOR_RED);
+  // HAL_Delay(500);
+  // LCD_Clear(ST7789_COLOR_GREEN);
+  // HAL_Delay(500);
+  // LCD_Clear(ST7789_COLOR_BLUE);
+  // HAL_Delay(500);
 
-//   // 4. 绘制彩条测试
-//   LCD_Fill(0, 0,   240, 40, ST7789_COLOR_RED);
-//   LCD_Fill(0, 40,  240, 40, ST7789_COLOR_GREEN);
-//   LCD_Fill(0, 80,  240, 40, ST7789_COLOR_BLUE);
-//   LCD_Fill(0, 120, 240, 40, ST7789_COLOR_YELLOW);
-//   LCD_Fill(0, 160, 240, 40, ST7789_COLOR_CYAN);
-//   LCD_Fill(0, 200, 240, 40, ST7789_COLOR_MAGENTA);
+  // 4. 绘制彩条测试
+  // LCD_Fill(0, 0,   240, 40, ST7789_COLOR_RED);
+  // LCD_Fill(0, 40,  240, 40, ST7789_COLOR_GREEN);
+  // LCD_Fill(0, 80,  240, 40, ST7789_COLOR_BLUE);
+  // LCD_Fill(0, 120, 240, 40, ST7789_COLOR_YELLOW);
+  // LCD_Fill(0, 160, 240, 40, ST7789_COLOR_CYAN);
+  // LCD_Fill(0, 200, 240, 40, ST7789_COLOR_MAGENTA);
   //HAL_Delay(1000);
   /* USER CODE END 2 */
 
