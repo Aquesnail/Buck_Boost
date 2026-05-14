@@ -10,6 +10,7 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846f
 #endif
+#define TWO_PI (2.0f * M_PI)
 
 // --- 低通滤波器 ---
 typedef struct {
@@ -19,7 +20,8 @@ typedef struct {
 } FirstOrderLPF_t;
 
 void LPF_CalcAlpha(FirstOrderLPF_t *lpf, float fc_hz, float Ts) {
-    lpf->alpha = (2.0f * M_PI * fc_hz * Ts) / (1.0f + 2.0f * M_PI * fc_hz * Ts);
+    float omega_T = TWO_PI * fc_hz * Ts;
+    lpf->alpha = omega_T / (1.0f + omega_T);
 }
 
 float LPF_Update(FirstOrderLPF_t *lpf, float input) {
@@ -27,7 +29,7 @@ float LPF_Update(FirstOrderLPF_t *lpf, float input) {
         lpf->out = input;
         lpf->init = 1;
     } else {
-        lpf->out = (lpf->alpha * input) + ((1.0f - lpf->alpha) * lpf->out);
+        lpf->out += lpf->alpha * (input - lpf->out);
     }
     return lpf->out;
 }
@@ -120,8 +122,8 @@ void control_current() {
     // ADC1：无硬件过采样，2个通道，计算 BUF_DEPTH (4次) 的平均值
    // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
     // 转换为电压值 (假设 3.3V 参考电压，12位分辨率 4095)
-    adc_voltages[0] = (float)adc_buffer1[0] / BUF_DEPTH * (3.3f / 4095.0f);
-    adc_voltages[1] = (float)adc_buffer1[1] / BUF_DEPTH * (3.3f / 4095.0f);
+    adc_voltages[0] = (float)adc_buffer1[0] * (3.3f / 4095.0f);
+    adc_voltages[1] = (float)adc_buffer1[1] * (3.3f / 4095.0f);
    // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
    // Control_Tick_Hook();
     // 下面写你的电流环控制逻辑...
@@ -130,20 +132,15 @@ void Power_Set_Safe_PWM(void) ;
 void Control_Tick_Hook(void);
 void control_voltage() {
     // ADC2：硬件开启了 8 倍过采样，4个通道，计算 BUF_DEPTH (4次) 的平均值
-    uint32_t sum_ch[ADC2_CH_NUM] = {0};
+
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
-    for (int i = 0; i < BUF_DEPTH; i++) {
-        sum_ch[0] += adc_buffer2[i * ADC2_CH_NUM + 0];
-        sum_ch[1] += adc_buffer2[i * ADC2_CH_NUM + 1];
-        sum_ch[2] += adc_buffer2[i * ADC2_CH_NUM + 2];
-        sum_ch[3] += adc_buffer2[i * ADC2_CH_NUM + 3];
-    }
+   
     
     // 转换为电压值 (注意：硬件自带了8倍求和，所以这里要除以 BUF_DEPTH * 8.0f)
-    adc_voltages[2] = (float)sum_ch[0] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
-    adc_voltages[3] = (float)sum_ch[1] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
-    adc_voltages[4] = (float)sum_ch[2] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
-    adc_voltages[5] = (float)sum_ch[3] / (BUF_DEPTH * 8.0f) * (3.3f / 4095.0f);
+    adc_voltages[2] = (float)adc_buffer2[0] / (BUF_DEPTH ) * (3.3f / 4095.0f);
+    adc_voltages[3] = (float)adc_buffer2[1] / (BUF_DEPTH ) * (3.3f / 4095.0f);
+    adc_voltages[4] = (float)adc_buffer2[2] / (BUF_DEPTH ) * (3.3f / 4095.0f);
+    adc_voltages[5] = (float)adc_buffer2[3] / (BUF_DEPTH ) * (3.3f / 4095.0f);
     
     Control_Tick_Hook();
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
@@ -157,7 +154,7 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
 
 // --- PWM 安全接管函数 ---
 void Power_Set_Safe_PWM(void) {
-    Update_Buck_Duty(0.01f);
+    Update_Buck_Duty(0.00f);
     Update_Boost_Duty(0.0f);
 }
 
@@ -168,20 +165,20 @@ void Control_Tick_Hook(void) {
 
     // 1. 初始化（仅执行一次）
     if (!ctrl_initialized) {
-        LPF_CalcAlpha(&vout_lpf, 1500.0f, Ts);
-        LPF_CalcAlpha(&vin_lpf, 1500.0f, Ts);
-        LPF_CalcAlpha(&iin_lpf, 500.0f, Ts);
+        LPF_CalcAlpha(&vout_lpf, 10.0f, Ts);
+        LPF_CalcAlpha(&vin_lpf, 10.0f, Ts);
+        LPF_CalcAlpha(&iin_lpf, 10.0f, Ts);
         ctrl_initialized = 1;
     }
 
     // 2. ADC 换算
     //powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
     powerMeas.temp = adc_voltages[5];
-    powerMeas.inductor_i = adc_voltages[0]; // 20.0f / 100.0f;
+    powerMeas.inductor_i = adc_voltages[0]; //* 20.0f / 100.0f;
     powerMeas.iout = adc_voltages[1];//-1.578)*(-3.95);//(adc_voltages[1]-1.5652f)*(-3.9717f);
 
-    float raw_vout = adc_voltages[2] ;//* 12.0f;
-    float raw_vin  = adc_voltages[4] ;//* 12.0f + 0.0965f;
+    float raw_vout = adc_voltages[2] * 12.0f;
+    float raw_vin  = adc_voltages[4] * 12.0f + 0.0965f;
     float raw_iin = (adc_voltages[3]);
     powerMeas.vout = LPF_Update(&vout_lpf, raw_vout);
     powerMeas.vin  = LPF_Update(&vin_lpf, raw_vin);

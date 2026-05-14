@@ -1,7 +1,6 @@
 .vscode/
 
 /仿真
-/Software/cmake
 /Software/Drivers
 /Software/build
 /Software/build/Debug
