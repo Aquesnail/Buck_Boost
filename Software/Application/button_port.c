@@ -49,7 +49,7 @@ void Button_Port_Init(void) {
 void Button_Port_Tick_Handler(void) {
     static uint8_t divider = 0;
     // 如果你在 SysTick(1ms) 中调用，divider >= 10 意味着 10ms 扫描一次核心逻辑
-    if (++divider >= 10) {
+    if (++divider >= 1) {
         divider = 0;
         Button_Core_Tick(10); // 传入真实的步进毫秒数
     }

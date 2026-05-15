@@ -13,8 +13,8 @@
 #define TWO_PI (2.0f * M_PI)
 #define ADC_AVG10_SCALE (3.3f / 4095.0f / 10.0f)  // 10样本平均 + ADC量程一步完成
 
-#define CTRL_FC_HZ  1500.0f   // 控制环 LPF 截止频率 (响应优先)
-#define DISP_AVG_N  10000       // 显示暴力平均样本数 (100Hz更新)
+#define CTRL_FC_HZ  500.0f   // 控制环 LPF 截止频率 (响应优先)
+#define DISP_AVG_N  1000       // 显示暴力平均样本数 (100Hz更新)
 
 // --- 低通滤波器 ---
 typedef struct {
@@ -65,6 +65,7 @@ static PowerMode_t current_mode = MODE_BUCK;
 static uint8_t uvlo_fault = 0;
 
 // --- PWM 参数 ---
+float buck_duty, boost_duty, inv_one_minus_d = 1.0f;
 #define PWM_RESOLUTION_MAX        13599.0f
 #define BOOTSTRAP_MIN_RECHARGE_RATIO 0.10f
 
@@ -73,6 +74,7 @@ void Update_Buck_Duty(float duty) {
         duty = 1.0f - BOOTSTRAP_MIN_RECHARGE_RATIO;
     }
     if (duty < 0.0f) duty = 0.0f;
+    buck_duty = duty;
     uint32_t ccr_value = (uint32_t)(PWM_RESOLUTION_MAX * (1.0f - duty));
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_1, ccr_value);
 }
@@ -82,6 +84,8 @@ void Update_Boost_Duty(float duty) {
         duty = 1.0f - BOOTSTRAP_MIN_RECHARGE_RATIO;
     }
     if (duty < 0.0f) duty = 0.0f;
+    boost_duty = duty;
+    inv_one_minus_d = 1.0f / (1.0f - duty);
     uint32_t ccr_value = (uint32_t)(PWM_RESOLUTION_MAX * duty);
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_3, ccr_value);
 }
@@ -132,7 +136,7 @@ void Control_Init(void) {
     __HAL_DMA_DISABLE_IT(hadc2.DMA_Handle, DMA_IT_HT);
     powerState.target_v = 12.0f;
     powerState.target_i = 3.0f;
-    powerState.pi_ki = 150.0f;
+    powerState.pi_ki = 0.05f;
     powerState.pi_kp = 0.15f;
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_4,424);
 }
@@ -174,12 +178,12 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
 
 // --- PWM 安全接管函数 ---
 void Power_Set_Safe_PWM(void) {
-    Update_Buck_Duty(0.1f);
+    Update_Buck_Duty(0.5f);
     Update_Boost_Duty(0.5f);
 }
 
 // --- 主控制 tick ---
-#define SAFE_MODE
+//#define SAFE_MODE
 void Control_Tick_Hook(void) {
    // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
 
@@ -200,13 +204,13 @@ void Control_Tick_Hook(void) {
 #define Iout_B 6.0658f
 #define Iin_K (-3.92428f)
 #define Iin_B 6.5696f
-#define IL_K Iout_K
-#define IL_B (-Iout_K * (1.649f))
+#define IL_K (-2.086f)
+#define IL_B 3.433f
     // 2. 电流环降采样 (100kHz累加 → 平均 + 低通滤波)
     if (cdata_rdy) {
         float raw_il   = csum0_rdy * ADC_AVG10_SCALE;
         float raw_iout = csum1_rdy * ADC_AVG10_SCALE;
-        adc_voltages[0] = LPF_Update(&il_lpf,   raw_il);
+        adc_voltages[0] = (LPF_Update(&il_lpf,   raw_il) * IL_K + IL_B) * inv_one_minus_d;
         adc_voltages[1] = LPF_Update(&iout_lpf, raw_iout) * Iout_K + Iout_B;
         cdata_rdy = 0;
     }
