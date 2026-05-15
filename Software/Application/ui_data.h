@@ -30,6 +30,7 @@ typedef struct {
  * 全局实例声明（在 control.c 中定义）
  * ========================================================================== */
 extern PowerMeas_t powerMeas;
+extern PowerMeas_t powerMeasDisp;
 extern PowerState_t powerState;
 
 #endif

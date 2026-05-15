@@ -11,6 +11,10 @@
 #define M_PI 3.14159265358979323846f
 #endif
 #define TWO_PI (2.0f * M_PI)
+#define ADC_AVG10_SCALE (3.3f / 4095.0f / 10.0f)  // 10样本平均 + ADC量程一步完成
+
+#define CTRL_FC_HZ  1500.0f   // 控制环 LPF 截止频率 (响应优先)
+#define DISP_AVG_N  10000       // 显示暴力平均样本数 (100Hz更新)
 
 // --- 低通滤波器 ---
 typedef struct {
@@ -84,6 +88,7 @@ void Update_Boost_Duty(float duty) {
 
 // --- 全局变量 ---
 PowerMeas_t powerMeas = {0};
+PowerMeas_t powerMeasDisp = {0};
 PowerState_t powerState = {0};
 
 #define ADC1_CH_NUM 2
@@ -99,6 +104,19 @@ static const float Ts = 0.0001f;       // 10kHz 采样周期
 static FirstOrderLPF_t vout_lpf = {0, 0, 0};
 static FirstOrderLPF_t vin_lpf = {0, 0, 0};
 static FirstOrderLPF_t iin_lpf = {0, 0, 0};
+
+// --- 电流环累加器 (100kHz → 10kHz 降采样) ---
+static float csum0, csum1;
+static float csum0_rdy, csum1_rdy;
+static uint8_t csample_cnt;
+static volatile uint8_t cdata_rdy;
+static FirstOrderLPF_t il_lpf   = {0, 0, 0};
+static FirstOrderLPF_t iout_lpf = {0, 0, 0};
+
+// --- 显示暴力平均累加器 ---
+static float disp_sum_vout, disp_sum_vin, disp_sum_iin;
+static float disp_sum_iout, disp_sum_il, disp_sum_temp;
+static uint16_t disp_avg_cnt;
 static uint8_t ctrl_initialized = 0;
 static uint32_t startup_counter = 0;
 static uint8_t is_power_ready = 0;
@@ -119,14 +137,16 @@ void Control_Init(void) {
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_4,424);
 }
 void control_current() {
-    // ADC1：无硬件过采样，2个通道，计算 BUF_DEPTH (4次) 的平均值
-   // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
-    // 转换为电压值 (假设 3.3V 参考电压，12位分辨率 4095)
-    adc_voltages[0] = (float)adc_buffer1[0] * (3.3f / 4095.0f);
-    adc_voltages[1] = (float)adc_buffer1[1] * (3.3f / 4095.0f);
-   // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
-   // Control_Tick_Hook();
-    // 下面写你的电流环控制逻辑...
+    csum0 += (float)adc_buffer1[0];
+    csum1 += (float)adc_buffer1[1];
+    if (++csample_cnt >= 10) {
+        csum0_rdy = csum0;
+        csum1_rdy = csum1;
+        cdata_rdy = 1;
+        csum0 = 0.0f;
+        csum1 = 0.0f;
+        csample_cnt = 0;
+    }
 }
 void Power_Set_Safe_PWM(void) ;
 void Control_Tick_Hook(void);
@@ -141,7 +161,7 @@ void control_voltage() {
     adc_voltages[3] = (float)adc_buffer2[1] / (BUF_DEPTH ) * (3.3f / 4095.0f);
     adc_voltages[4] = (float)adc_buffer2[2] / (BUF_DEPTH ) * (3.3f / 4095.0f);
     adc_voltages[5] = (float)adc_buffer2[3] / (BUF_DEPTH ) * (3.3f / 4095.0f);
-    
+
     Control_Tick_Hook();
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
 }
@@ -154,8 +174,8 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
 
 // --- PWM 安全接管函数 ---
 void Power_Set_Safe_PWM(void) {
-    Update_Buck_Duty(0.00f);
-    Update_Boost_Duty(0.0f);
+    Update_Buck_Duty(0.1f);
+    Update_Boost_Duty(0.5f);
 }
 
 // --- 主控制 tick ---
@@ -165,31 +185,74 @@ void Control_Tick_Hook(void) {
 
     // 1. 初始化（仅执行一次）
     if (!ctrl_initialized) {
-        LPF_CalcAlpha(&vout_lpf, 10.0f, Ts);
-        LPF_CalcAlpha(&vin_lpf, 10.0f, Ts);
-        LPF_CalcAlpha(&iin_lpf, 10.0f, Ts);
+        LPF_CalcAlpha(&vout_lpf, CTRL_FC_HZ, Ts);
+        LPF_CalcAlpha(&vin_lpf,  CTRL_FC_HZ, Ts);
+        LPF_CalcAlpha(&iin_lpf,  CTRL_FC_HZ, Ts);
+        LPF_CalcAlpha(&il_lpf,   CTRL_FC_HZ, Ts);
+        LPF_CalcAlpha(&iout_lpf, CTRL_FC_HZ, Ts);
         ctrl_initialized = 1;
     }
+#define Vout_K  12.0f
+#define Vout_B  0.0965f
+#define Vin_K 12.0f
+#define Vin_B 0.0465f
+#define Iout_K (-3.8488f)
+#define Iout_B 6.0658f
+#define Iin_K (-3.92428f)
+#define Iin_B 6.5696f
+#define IL_K Iout_K
+#define IL_B (-Iout_K * (1.649f))
+    // 2. 电流环降采样 (100kHz累加 → 平均 + 低通滤波)
+    if (cdata_rdy) {
+        float raw_il   = csum0_rdy * ADC_AVG10_SCALE;
+        float raw_iout = csum1_rdy * ADC_AVG10_SCALE;
+        adc_voltages[0] = LPF_Update(&il_lpf,   raw_il);
+        adc_voltages[1] = LPF_Update(&iout_lpf, raw_iout) * Iout_K + Iout_B;
+        cdata_rdy = 0;
+    }
 
-    // 2. ADC 换算
-    //powerMeas.iin = (adc_voltages[3] - 1.65f) * 200.0f / 100.0f;
+    // 3. ADC 换算 → powerMeas
     powerMeas.temp = adc_voltages[5];
-    powerMeas.inductor_i = adc_voltages[0]; //* 20.0f / 100.0f;
-    powerMeas.iout = adc_voltages[1];//-1.578)*(-3.95);//(adc_voltages[1]-1.5652f)*(-3.9717f);
+    powerMeas.inductor_i = adc_voltages[0];
+    powerMeas.iout = adc_voltages[1] ;
 
-    float raw_vout = adc_voltages[2] * 12.0f;
-    float raw_vin  = adc_voltages[4] * 12.0f + 0.0965f;
-    float raw_iin = (adc_voltages[3]);
+    float raw_vout = adc_voltages[2] * Vout_K + Vout_B;
+    float raw_vin  = adc_voltages[4] * Vin_K + Vin_B;
+    float raw_iin = (adc_voltages[3]) * Iin_K + Iin_B;
     powerMeas.vout = LPF_Update(&vout_lpf, raw_vout);
     powerMeas.vin  = LPF_Update(&vin_lpf, raw_vin);
     powerMeas.iin  = LPF_Update(&iin_lpf, raw_iin);
+
+    // 显示暴力平均累加 (全部每 tick 累加, 保证计数与样本数一致)
+    disp_sum_vout += raw_vout;
+    disp_sum_vin  += raw_vin;
+    disp_sum_iin  += raw_iin;
+    disp_sum_il   += adc_voltages[0];
+    disp_sum_iout += adc_voltages[1];
+    disp_sum_temp += adc_voltages[5];
+
+    if (++disp_avg_cnt >= DISP_AVG_N) {
+        powerMeasDisp.vout       = disp_sum_vout / DISP_AVG_N;
+        powerMeasDisp.vin        = disp_sum_vin  / DISP_AVG_N;
+        powerMeasDisp.iin        = disp_sum_iin  / DISP_AVG_N;
+        powerMeasDisp.iout       = disp_sum_iout / DISP_AVG_N;
+        powerMeasDisp.inductor_i = disp_sum_il   / DISP_AVG_N;
+        powerMeasDisp.temp       = disp_sum_temp / DISP_AVG_N;
+        disp_sum_vout = 0.0f;
+        disp_sum_vin  = 0.0f;
+        disp_sum_iin  = 0.0f;
+        disp_sum_iout = 0.0f;
+        disp_sum_il   = 0.0f;
+        disp_sum_temp = 0.0f;
+        disp_avg_cnt  = 0;
+    }
 
     float target_v = powerState.target_v;
     float vin = powerMeas.vin;
     float current_v = powerMeas.vout;
 
     // ==========================================
-    // 3. UVLO 欠压保护逻辑 (带滞环)
+    // 4. UVLO 欠压保护逻辑 (带滞环)
     // ==========================================
     if (!uvlo_fault) {
         if (vin < 5.0f) {
@@ -213,7 +276,7 @@ void Control_Tick_Hook(void) {
     }
 
     // ==========================================
-    // 4. 软启动等待
+    // 5. 软启动等待
     // ==========================================
     if (startup_counter < STARTUP_DELAY_TICKS) {
         startup_counter++;
@@ -241,7 +304,7 @@ void Control_Tick_Hook(void) {
     float current_i = powerMeas.iout;
 
     // ==========================================
-    // 5. 恒流环 (CC Loop) 计算
+    // 6. 恒流环 (CC Loop) 计算
     // ==========================================
     float err_i = current_i - target_i;
 
@@ -260,7 +323,7 @@ void Control_Tick_Hook(void) {
     float err = dynamic_target_v - current_v;
 
     // ==========================================
-    // 6. 滞环状态机
+    // 7. 滞环状态机
     // ==========================================
     float switch_to_boost_threshold = target_v + 0.6f;
     float switch_to_buck_threshold  = switch_to_boost_threshold + HYST_BAND_V;
@@ -281,7 +344,7 @@ void Control_Tick_Hook(void) {
     }
 
     // ==========================================
-    // 7. 双模独立 PI 控制
+    // 8. 双模独立 PI 控制
     // ==========================================
     if (current_mode == MODE_BUCK) {
         buck_pi.integral += buck_pi.ki * err * Ts;

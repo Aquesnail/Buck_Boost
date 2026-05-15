@@ -256,11 +256,11 @@ static void Page_Output_Draw(void) {
 
     /* 实时测量值 — 显示在页面上方 */
     sprintf(buf, "Vin:%.2fV Vout:%.2fV Iin:%.3fA",
-            powerMeas.vin, powerMeas.vout, powerMeas.iin);
+            powerMeasDisp.vin, powerMeasDisp.vout, powerMeasDisp.iin);
     LCD_DrawString(5, 2, buf, LABEL_FONT, fg, bg);
 
     sprintf(buf, "Iout:%.3fA IL:%.3fA",
-            powerMeas.iout, powerMeas.inductor_i);
+            powerMeasDisp.iout, powerMeasDisp.inductor_i);
     LCD_DrawString(5, 20, buf, LABEL_FONT, fg, bg);
 
     static const uint16_t val_x    = 80;
