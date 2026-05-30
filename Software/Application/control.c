@@ -110,12 +110,13 @@ static FirstOrderLPF_t vin_lpf = {0, 0, 0};
 static FirstOrderLPF_t iin_lpf = {0, 0, 0};
 
 // --- 电流环累加器 (100kHz → 10kHz 降采样) ---
-static float csum0, csum1;
-static float csum0_rdy, csum1_rdy;
+static uint32_t csum0, csum1;
+static uint32_t csum0_rdy, csum1_rdy;
 static uint8_t csample_cnt;
 static volatile uint8_t cdata_rdy;
 static FirstOrderLPF_t il_lpf   = {0, 0, 0};
 static FirstOrderLPF_t iout_lpf = {0, 0, 0};
+static float measured_il, measured_iout;
 
 // --- 显示暴力平均累加器 ---
 static float disp_sum_vout, disp_sum_vin, disp_sum_iin;
@@ -124,6 +125,9 @@ static uint16_t disp_avg_cnt;
 static uint8_t ctrl_initialized = 0;
 static uint32_t startup_counter = 0;
 static uint8_t is_power_ready = 0;
+
+
+static uint32_t target_current_L = 0;
 
 #define STARTUP_DELAY_MS    20.0f
 #define STARTUP_DELAY_TICKS (uint32_t)(STARTUP_DELAY_MS / (Ts * 1000.0f))
@@ -134,15 +138,16 @@ void Control_Init(void) {
     HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer2, ADC2_CH_NUM * BUF_DEPTH);
     __HAL_DMA_DISABLE_IT(hadc1.DMA_Handle, DMA_IT_HT);
     __HAL_DMA_DISABLE_IT(hadc2.DMA_Handle, DMA_IT_HT);
-    powerState.target_v = 12.0f;
+    powerState.target_v = 4.0f;
     powerState.target_i = 3.0f;
     powerState.pi_ki = 0.05f;
     powerState.pi_kp = 0.15f;
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_4,424);
 }
 void control_current() {
-    csum0 += (float)adc_buffer1[0];
-    csum1 += (float)adc_buffer1[1];
+   // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+    csum0 += (uint32_t)adc_buffer1[0];
+    csum1 += (uint32_t)adc_buffer1[1];
     if (++csample_cnt >= 10) {
         csum0_rdy = csum0;
         csum1_rdy = csum1;
@@ -151,13 +156,14 @@ void control_current() {
         csum1 = 0.0f;
         csample_cnt = 0;
     }
+   // HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
 }
 void Power_Set_Safe_PWM(void) ;
 void Control_Tick_Hook(void);
 void control_voltage() {
     // ADC2：硬件开启了 8 倍过采样，4个通道，计算 BUF_DEPTH (4次) 的平均值
 
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+    
    
     
     // 转换为电压值 (注意：硬件自带了8倍求和，所以这里要除以 BUF_DEPTH * 8.0f)
@@ -167,7 +173,7 @@ void control_voltage() {
     adc_voltages[5] = (float)adc_buffer2[3] / (BUF_DEPTH ) * (3.3f / 4095.0f);
 
     Control_Tick_Hook();
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+    
 }
 
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
@@ -178,8 +184,8 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
 
 // --- PWM 安全接管函数 ---
 void Power_Set_Safe_PWM(void) {
-    Update_Buck_Duty(0.5f);
-    Update_Boost_Duty(0.5f);
+    Update_Buck_Duty(0.0f);
+    Update_Boost_Duty(0.0f);
 }
 
 // --- 主控制 tick ---
@@ -192,7 +198,7 @@ void Control_Tick_Hook(void) {
         LPF_CalcAlpha(&vout_lpf, CTRL_FC_HZ, Ts);
         LPF_CalcAlpha(&vin_lpf,  CTRL_FC_HZ, Ts);
         LPF_CalcAlpha(&iin_lpf,  CTRL_FC_HZ, Ts);
-        LPF_CalcAlpha(&il_lpf,   CTRL_FC_HZ, Ts);
+        LPF_CalcAlpha(&il_lpf,   2000.0f, Ts);
         LPF_CalcAlpha(&iout_lpf, CTRL_FC_HZ, Ts);
         ctrl_initialized = 1;
     }
@@ -204,21 +210,23 @@ void Control_Tick_Hook(void) {
 #define Iout_B 6.0658f
 #define Iin_K (-3.92428f)
 #define Iin_B 6.5696f
-#define IL_K (-2.086f)
-#define IL_B 3.433f
+#define IL_K (-4.0f)
+#define IL_B 6.6f
     // 2. 电流环降采样 (100kHz累加 → 平均 + 低通滤波)
+     float raw_il;
+     float raw_iout;
     if (cdata_rdy) {
-        float raw_il   = csum0_rdy * ADC_AVG10_SCALE;
-        float raw_iout = csum1_rdy * ADC_AVG10_SCALE;
-        adc_voltages[0] = (LPF_Update(&il_lpf,   raw_il) * IL_K + IL_B) * inv_one_minus_d;
-        adc_voltages[1] = LPF_Update(&iout_lpf, raw_iout) * Iout_K + Iout_B;
+        raw_il   = (float)csum0_rdy * ADC_AVG10_SCALE;
+        raw_iout = (float)csum1_rdy * ADC_AVG10_SCALE;
+        measured_il   = LPF_Update(&il_lpf,   raw_il) * IL_K + IL_B;
+        measured_iout = LPF_Update(&iout_lpf, raw_iout) * Iout_K + Iout_B;
         cdata_rdy = 0;
     }
 
     // 3. ADC 换算 → powerMeas
     powerMeas.temp = adc_voltages[5];
-    powerMeas.inductor_i = adc_voltages[0];
-    powerMeas.iout = adc_voltages[1] ;
+    powerMeas.inductor_i = measured_il;
+    powerMeas.iout = measured_iout ;
 
     float raw_vout = adc_voltages[2] * Vout_K + Vout_B;
     float raw_vin  = adc_voltages[4] * Vin_K + Vin_B;
@@ -231,8 +239,8 @@ void Control_Tick_Hook(void) {
     disp_sum_vout += raw_vout;
     disp_sum_vin  += raw_vin;
     disp_sum_iin  += raw_iin;
-    disp_sum_il   += adc_voltages[0];
-    disp_sum_iout += adc_voltages[1];
+    disp_sum_il   += measured_il;
+    disp_sum_iout += measured_iout;
     disp_sum_temp += adc_voltages[5];
 
     if (++disp_avg_cnt >= DISP_AVG_N) {
@@ -250,7 +258,6 @@ void Control_Tick_Hook(void) {
         disp_sum_temp = 0.0f;
         disp_avg_cnt  = 0;
     }
-
     float target_v = powerState.target_v;
     float vin = powerMeas.vin;
     float current_v = powerMeas.vout;

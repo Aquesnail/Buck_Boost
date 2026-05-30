@@ -12,7 +12,7 @@ typedef struct {
     float iin;          // 输入电流 (A)
     float iout;         // 输出电流 (A)
     float temp;         // 温度 (°C)
-    float inductor_i;   // 电感电流 (A)
+    float inductor_i;       // 电感电流 (A)
 } PowerMeas_t;
 
 /* ==========================================================================
