@@ -107,6 +107,17 @@ static uint8_t uvlo_fault = 0;
 static uint8_t open_loop_enable = 0;
 static volatile int32_t open_loop_ccr = 0;
 
+/* 电压目标斜率限制: 1V/5ms = 200V/s */
+#define SLEW_RATE_V_PER_S      200.0f
+static float   target_v_slewed    = 0.0f;
+static uint8_t slew_active_prev   = 0;
+
+/* CC 注入模式: 电流外环 PI + 斜率限制 */
+#define CC_SLEW_RATE_A_PER_S    100.0f   /* 0.5A/5ms = 100A/s */
+static PI_Controller_t cc_pi           = {0.5f, 500.0f, 0.0f};
+static float           target_i_slewed  = 0.0f;
+static uint8_t         cc_mode_prev     = 0;
+
 #define STARTUP_DELAY_MS    20.0f
 #define STARTUP_DELAY_TICKS (uint32_t)(STARTUP_DELAY_MS / (Ts * 1000.0f))
 
@@ -250,6 +261,13 @@ void control_current(void) {
         return;
     }
 
+    // 用户关闭输出
+    if (!powerState.output_en) {
+        i_float_ctrl.integral = 0.0f;
+        Power_Set_Safe_PWM();
+        return;
+    }
+
     if (!is_power_ready || uvlo_fault) {
         i_float_ctrl.integral = 0.0f;
         Power_Set_Safe_PWM();
@@ -389,21 +407,112 @@ void Control_Tick_Hook(void) {
     }
 
     // ==========================================
-    // 6. 统一外环：恒压环 + 恒流(CC)限制 计算
+    // 6. 统一外环：CV 恒压 / CC 恒流注入（对称架构）
     // ==========================================
-    float err_v = powerState.target_v - powerMeas.vout;
-    
-    // 积分累加
-    v_pi.integral += v_pi.ki * err_v * Ts;
-    if (v_pi.integral > 6.5f)  v_pi.integral = 6.5f;  // 最大索要 8A 电流
-    if (v_pi.integral < -0.5f) v_pi.integral = -0.5f; // 允许轻微反向
 
-    float target_i_amps = (v_pi.kp * err_v) + v_pi.integral;
+    // 6a. 模式切换检测：清零目标 PI，从当前实测值开始爬升
+    if (powerState.cc_mode != cc_mode_prev) {
+        if (powerState.cc_mode) {
+            /* CV → CC：清零 CC PI，从当前 Iout 开始爬升 */
+            cc_pi.integral   = 0.0f;
+            target_i_slewed  = powerMeas.iout;
+            slew_active_prev = 0;   /* 标记 CV slew 需要重新初始化 */
+        } else {
+            /* CC → CV：清零 CV PI，从当前 Vout 开始爬升 */
+            v_pi.integral    = 0.0f;
+            target_v_slewed  = powerMeas.vout;
+        }
+        cc_mode_prev = powerState.cc_mode;
+    }
 
-    // 恒流环限幅：如果输出电流超过设定的 target_i，动态压低外环的索要电流
-    float err_cc = powerMeas.iout - powerState.target_i;
-    if (err_cc > 0.0f) {
-        target_i_amps -= 0.5f * err_cc; // 引入 CC 动态深度干扰
+    float target_i_amps;
+
+    if (powerState.cc_mode) {
+        // ==========================================
+        // CC 注入模式：电流外环调节 Iout → target_i
+        //               target_v 作为合规电压上限
+        // ==========================================
+
+        /* CC 电流目标斜率限制 (0.5A/5ms = 100A/s) */
+        {
+            uint8_t cc_active = (is_power_ready && !uvlo_fault && powerState.output_en);
+
+            if (!cc_active) {
+                target_i_slewed = powerMeas.iout;
+            } else {
+                float step_max = CC_SLEW_RATE_A_PER_S * Ts;  /* 100 * 0.0001 = 0.01A/tick */
+                float diff = powerState.target_i - target_i_slewed;
+                if (diff > step_max) {
+                    target_i_slewed += step_max;
+                } else if (diff < -step_max) {
+                    target_i_slewed -= step_max;
+                } else {
+                    target_i_slewed = powerState.target_i;
+                }
+            }
+        }
+
+        /* CC 电流 PI 外环 */
+        float err_i = target_i_slewed - powerMeas.iout;
+        cc_pi.integral += cc_pi.ki * err_i * Ts;
+        if (cc_pi.integral > 6.5f)  cc_pi.integral = 6.5f;
+        if (cc_pi.integral < -0.5f) cc_pi.integral = -0.5f;
+
+        target_i_amps = (cc_pi.kp * err_i) + cc_pi.integral;
+
+        /* 电压合规上限：Vout 超过 target_v 时压低电流 + 反饱和 */
+        float err_vlim = powerMeas.vout - powerState.target_v;
+        if (err_vlim > 0.0f) {
+            target_i_amps -= 2.0f * err_vlim;   /* 2A/V 增益，足够压制 PI */
+            /* 反饱和：电压限制激活时，钳位 PI 积分，防止对抗 */
+            if (target_i_amps < 0.0f) {
+                target_i_amps    = 0.0f;
+                cc_pi.integral   = 0.0f;
+            } else if (cc_pi.integral > target_i_amps) {
+                cc_pi.integral   = target_i_amps;
+            }
+        }
+
+    } else {
+        // ==========================================
+        // CV 恒压模式：电压外环调节 Vout → target_v
+        //               target_i 作为过流限制
+        // ==========================================
+
+        /* 电压目标斜率限制 (1V/5ms = 200V/s) */
+        {
+            uint8_t slew_active = (is_power_ready && !uvlo_fault && powerState.output_en);
+
+            if (!slew_active) {
+                target_v_slewed = powerMeas.vout;
+            } else if (!slew_active_prev) {
+                target_v_slewed = powerMeas.vout;
+            } else {
+                float step_max = SLEW_RATE_V_PER_S * Ts;
+                float diff = powerState.target_v - target_v_slewed;
+                if (diff > step_max) {
+                    target_v_slewed += step_max;
+                } else if (diff < -step_max) {
+                    target_v_slewed -= step_max;
+                } else {
+                    target_v_slewed = powerState.target_v;
+                }
+            }
+            slew_active_prev = slew_active;
+        }
+
+        float err_v = target_v_slewed - powerMeas.vout;
+        v_pi.integral += v_pi.ki * err_v * Ts;
+        if (v_pi.integral > 6.5f)  v_pi.integral = 6.5f;
+        if (v_pi.integral < -0.5f) v_pi.integral = -0.5f;
+
+        target_i_amps = (v_pi.kp * err_v) + v_pi.integral;
+
+        /* 恒流限制：Iout 超过 target_i 时压低电流 */
+        float err_cc = powerMeas.iout - powerState.target_i;
+        if (err_cc > 0.0f) {
+            target_i_amps -= 0.5f * err_cc;
+        }
     }
 
     // 物理电流总限幅安全护栏 (0A ~ 8A)

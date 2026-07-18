@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "ui_page_output.h"
 #include "button_port.h"
+#include "ui_framework.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,12 +57,21 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 256 * 4
 };
 
+/* Definitions for uiDrawTask */
+osThreadId_t uiDrawTaskHandle;
+const osThreadAttr_t uiDrawTask_attributes = {
+  .name = "uiDrawTask",
+  .priority = (osPriority_t) osPriorityBelowNormal,
+  .stack_size = 512 * 4
+};
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
+void StartUIDrawTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -95,6 +105,9 @@ void MX_FREERTOS_Init(void) {
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
+  /* creation of uiDrawTask */
+  uiDrawTaskHandle = osThreadNew(StartUIDrawTask, NULL, &uiDrawTask_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -118,15 +131,36 @@ void StartDefaultTask(void *argument)
   /* 等待 UI 框架初始化完成 */
   osDelay(50);
 
-  /* Infinite loop */
+  /* Infinite loop — 按键扫描 + UI 事件处理（高优先级，不被绘制阻塞） */
   for(;;)
   {
     Button_Port_Tick_Handler();
     UI_Tick_Handler();  // UI 心跳（内部 10ms 分频）
-    UI_Draw_Handler();  // UI 屏幕刷新（当前页面的 Draw）
-    osDelay(10);
+    osDelay(5);
   }
   /* USER CODE END StartDefaultTask */
+}
+
+/* USER CODE BEGIN Header_StartUIDrawTask */
+/**
+  * @brief  Function implementing the uiDrawTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartUIDrawTask */
+void StartUIDrawTask(void *argument)
+{
+  /* USER CODE BEGIN StartUIDrawTask */
+  /* 等待按键任务先完成初始化 */
+  osDelay(100);
+
+  /* Infinite loop — 仅负责屏幕刷新（较低优先级） */
+  for(;;)
+  {
+    UI_Draw_Handler();
+    osDelay(50);
+  }
+  /* USER CODE END StartUIDrawTask */
 }
 
 /* Private application code --------------------------------------------------*/

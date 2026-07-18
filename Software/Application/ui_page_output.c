@@ -216,6 +216,14 @@ static void Page_Output_Tick(int16_t delta) {
 }
 
 static void Page_Output_OnButton(uint8_t btn_id, ButtonEvent_t event) {
+    /* 双击编码器按键：切换 CC 恒流注入模式 */
+    if (btn_id == 0 && event == BTN_EVENT_DOUBLE_CLICK) {
+        powerState.cc_mode = !powerState.cc_mode;
+        edit_mode = OUT_MODE_IDLE;
+        digit_idx = 1;
+        return;
+    }
+
     if (event != BTN_EVENT_SINGLE_CLICK) return;
 
     if (btn_id == 0) {
@@ -239,6 +247,9 @@ static void Page_Output_OnButton(uint8_t btn_id, ButtonEvent_t event) {
         if (edit_mode != OUT_MODE_IDLE && digit_idx > 0) {
             digit_idx--;
         }
+    } else if (btn_id == 2) {
+        /* Key_Middle：输出开关 */
+        powerState.output_en = !powerState.output_en;
     } else if (btn_id == 3) {
         /* Key_Right：光标右移 */
         if (edit_mode != OUT_MODE_IDLE && digit_idx < (DIGIT_COUNT - 1)) {
@@ -247,37 +258,70 @@ static void Page_Output_OnButton(uint8_t btn_id, ButtonEvent_t event) {
     }
 }
 
+/* ==========================================================================
+ * 显示布局常量
+ * ========================================================================== */
+#define COL1_X       4     /* 左列 X */
+#define COL2_X       164   /* 右列 X */
+#define ROW1_LABEL_Y 28    /* 第一行标签 Y */
+#define ROW1_VAL_Y   54    /* 第一行数值 Y */
+#define ROW2_LABEL_Y 113   /* 第二行标签 Y */
+#define ROW2_VAL_Y   139   /* 第二行数值 Y */
+#define VAL_W        82    /* DrawValueFixed 宽度 */
+#define UNIT_OFF     86    /* 单位文字相对数值的偏移 */
+
 static void Page_Output_Draw(void) {
     uint16_t bg = ST7789_COLOR_BLACK;
     uint16_t fg = ST7789_COLOR_WHITE;
     uint16_t box_color = ST7789_COLOR_YELLOW;
+    uint8_t cc = powerState.cc_mode;
 
-    char buf[64];
+    char buf[48];
 
-    /* 实时测量值 — 显示在页面上方 */
-    sprintf(buf, "Vin:%.2fV Vout:%.2fV Iin:%.3fA",
-            powerMeasDisp.vin, powerMeasDisp.vout, powerMeasDisp.iin);
+    /* 顶部诊断信息（小字） */
+    sprintf(buf, "Vin:%.1fV  Iin:%.3fA  IL:%.3fA",
+            powerMeasDisp.vin, powerMeasDisp.iin, powerMeasDisp.inductor_i);
     LCD_DrawString(5, 2, buf, LABEL_FONT, fg, bg);
 
-    sprintf(buf, "Iout:%.3fA IL:%.3fA",
-            powerMeasDisp.iout, powerMeasDisp.inductor_i);
-    LCD_DrawString(5, 20, buf, LABEL_FONT, fg, bg);
+    /* ============================================================
+     * 主显示区：2×2 网格
+     * CV 模式: Vset/Vout, Iset/Iout
+     * CC 模式: Vlim/Vout, Icc /Iout  (Vlim=合规电压, Icc=注入电流)
+     * ============================================================ */
 
-    static const uint16_t val_x    = 80;
-    static const uint16_t val_y_v  = 55;
-    static const uint16_t val_y_i  = 135;
-
-    LCD_DrawString(10, 60,  "Vset:", LABEL_FONT, fg, bg);
-    LCD_DrawString(220, 60, "V",     LABEL_FONT, fg, bg);
-    DrawValueFixed(val_x, val_y_v, powerState.target_v,
+    /* --- 第一行：电压设定 / 电压输出 --- */
+    LCD_DrawString(COL1_X, ROW1_LABEL_Y, cc ? "Vlim:" : "Vset:", VAL_FONT, fg, bg);
+    DrawValueFixed(COL1_X, ROW1_VAL_Y, powerState.target_v,
                    (edit_mode == OUT_MODE_EDIT_V) ? digit_idx : 0xFF,
                    fg, bg, box_color);
+    LCD_DrawString(COL1_X + UNIT_OFF, ROW1_VAL_Y + 1, "V", VAL_FONT, fg, bg);
 
-    LCD_DrawString(10, 140,  "Iset:", LABEL_FONT, fg, bg);
-    LCD_DrawString(220, 140, "A",     LABEL_FONT, fg, bg);
-    DrawValueFixed(val_x, val_y_i, powerState.target_i,
+    LCD_DrawString(COL2_X, ROW1_LABEL_Y, "Vout:", VAL_FONT, fg, bg);
+    DrawValueFixed(COL2_X, ROW1_VAL_Y, powerMeasDisp.vout,
+                   0xFF, fg, bg, box_color);
+    LCD_DrawString(COL2_X + UNIT_OFF, ROW1_VAL_Y + 1, "V", VAL_FONT, fg, bg);
+
+    /* --- 第二行：电流设定 / 电流输出 --- */
+    LCD_DrawString(COL1_X, ROW2_LABEL_Y, cc ? "Icc:" : "Ilim:", VAL_FONT, fg, bg);
+    DrawValueFixed(COL1_X, ROW2_VAL_Y, powerState.target_i,
                    (edit_mode == OUT_MODE_EDIT_I) ? digit_idx : 0xFF,
                    fg, bg, box_color);
+    LCD_DrawString(COL1_X + UNIT_OFF, ROW2_VAL_Y + 1, "A", VAL_FONT, fg, bg);
+
+    LCD_DrawString(COL2_X, ROW2_LABEL_Y, "Iout:", VAL_FONT, fg, bg);
+    DrawValueFixed(COL2_X, ROW2_VAL_Y, powerMeasDisp.iout,
+                   0xFF, fg, bg, box_color);
+    LCD_DrawString(COL2_X + UNIT_OFF, ROW2_VAL_Y + 1, "A", VAL_FONT, fg, bg);
+
+    /* --- 底部：输出状态 + CC 模式指示 --- */
+    {
+        uint16_t out_color = powerState.output_en ? ST7789_COLOR_GREEN : ST7789_COLOR_RED;
+        LCD_DrawString(10, 188, powerState.output_en ? "OUTPUT: ON " : "OUTPUT: OFF",
+                       VAL_FONT, out_color, bg);
+    }
+    if (cc) {
+        LCD_DrawString(10, 212, "CC MODE", VAL_FONT, ST7789_COLOR_YELLOW, bg);
+    }
 }
 
 /* ==========================================================================

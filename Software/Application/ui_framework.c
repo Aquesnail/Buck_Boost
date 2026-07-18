@@ -54,6 +54,7 @@ void UI_NotifyButton(uint8_t btn_id, ButtonEvent_t event) {
 
 void UI_Tick_Handler(void) {
     static uint8_t divider = 0;
+    static uint8_t rot_lock = 0;      /* 旋转锁定计数器：旋转后短时屏蔽按键 */
     if (++divider < UI_TICK_PERIOD_MS) return;
     divider = 0;
 
@@ -61,11 +62,21 @@ void UI_Tick_Handler(void) {
     UI_Page_t *page = page_table[curr_idx];
     int16_t delta = Encoder_Get_Delta();
 
-    /* 分发按键事件 */
+    /* 编码器旋转锁定：旋转后 100ms 内忽略按键 */
+    /* (防止 EC11 编码器旋转时机械耦合导致内置按键误触发) */
+    if (delta != 0) {
+        rot_lock = 100;            /* 20 ticks × 5ms = 100ms */
+    } else if (rot_lock > 0) {
+        rot_lock--;
+    }
+
+    /* 分发按键事件（旋转锁定时丢弃，仅丢弃编码器按键） */
     if (btn_pending) {
         btn_pending = 0;
-        if (page->OnButton) {
-            page->OnButton(btn_id_buf, btn_event_buf);
+        if (rot_lock == 0 || btn_id_buf != 0) {
+            if (page->OnButton) {
+                page->OnButton(btn_id_buf, btn_event_buf);
+            }
         }
     }
 

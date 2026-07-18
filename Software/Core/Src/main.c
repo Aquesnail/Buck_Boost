@@ -199,8 +199,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    UI_Draw_Handler();
-
+    /* UI_Draw 已由独立的 uiDrawTask 处理 */
     HAL_Delay(50);
 
     // 状态灯闪烁
